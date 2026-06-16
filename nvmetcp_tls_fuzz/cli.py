@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from .campaign import CampaignConfig, CampaignGenerator, DEFAULT_CASE_COUNT, DEFAULT_RANDOM_RATIO
+from .case_generator import CaseGenerator
+from .catalog import FieldCatalog
+from .oracle import OracleAnalyzer
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="nvmetcp-tls-fuzz")
+    subcommands = parser.add_subparsers(dest="command_name", required=True)
+
+    gen = subcommands.add_parser("generate-case")
+    gen.add_argument("--catalog", default="field_catalog.yaml")
+    gen.add_argument("--seed", type=int, required=True)
+    gen.add_argument("--direction", default="both", choices=["host", "target", "both"])
+    gen.add_argument("--pdu-type")
+    gen.add_argument("--command", default="read")
+    gen.add_argument("--strategy")
+
+    campaign = subcommands.add_parser("generate-campaign")
+    campaign.add_argument("--catalog", default="field_catalog.yaml")
+    campaign.add_argument("--seed", type=int, required=True)
+    campaign.add_argument("--count", type=int, default=DEFAULT_CASE_COUNT)
+    campaign.add_argument("--random-ratio", type=float, default=DEFAULT_RANDOM_RATIO)
+    campaign.add_argument("--output", type=Path, required=True)
+    campaign.add_argument("--summary", action="store_true")
+
+    analyze = subcommands.add_parser("analyze")
+    analyze.add_argument("--dmesg", type=Path)
+    analyze.add_argument("--fio-json", type=Path)
+    analyze.add_argument("--nvme-before", type=Path)
+    analyze.add_argument("--nvme-after", type=Path)
+    analyze.add_argument("--timed-out", action="store_true")
+
+    args = parser.parse_args()
+    if args.command_name == "generate-case":
+        catalog = FieldCatalog.from_yaml(args.catalog)
+        case = CaseGenerator(catalog).generate(
+            seed=args.seed,
+            direction=args.direction,
+            pdu_type=args.pdu_type,
+            command=args.command,
+            strategy=args.strategy,
+        )
+        print(json.dumps(case.to_dict(), indent=2, sort_keys=True))
+        return
+
+    if args.command_name == "generate-campaign":
+        catalog = FieldCatalog.from_yaml(args.catalog)
+        config = CampaignConfig(seed=args.seed, count=args.count, random_ratio=args.random_ratio)
+        generator = CampaignGenerator(catalog)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with args.output.open("w", encoding="utf-8") as handle:
+            for item in generator.iter_cases(config):
+                handle.write(json.dumps(item.to_dict(), sort_keys=True) + "\n")
+        if args.summary:
+            print(json.dumps(generator.summary(config), indent=2, sort_keys=True))
+        return
+
+    fio_json = _load_json(args.fio_json)
+    result = OracleAnalyzer().analyze(
+        dmesg=_load_text(args.dmesg),
+        fio_json=fio_json,
+        nvme_before=_load_json(args.nvme_before) or {},
+        nvme_after=_load_json(args.nvme_after) or {},
+        timed_out=args.timed_out,
+    )
+    print(json.dumps({"verdict": result.verdict, "reasons": list(result.reasons)}, indent=2))
+
+
+def _load_text(path: Path | None) -> str:
+    if not path:
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _load_json(path: Path | None) -> dict | None:
+    if not path:
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    main()
