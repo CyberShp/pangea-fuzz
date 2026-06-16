@@ -8,6 +8,7 @@ from .campaign import CampaignConfig, CampaignGenerator, DEFAULT_CASE_COUNT, DEF
 from .case_generator import CaseGenerator
 from .catalog import FieldCatalog
 from .oracle import OracleAnalyzer
+from .report import ReportGenerator, write_report_files
 
 
 def main() -> None:
@@ -37,6 +38,12 @@ def main() -> None:
     analyze.add_argument("--nvme-after", type=Path)
     analyze.add_argument("--timed-out", action="store_true")
 
+    report = subcommands.add_parser("generate-report")
+    report.add_argument("--campaign", type=Path)
+    report.add_argument("--artifacts-dir", type=Path)
+    report.add_argument("--output-json", type=Path)
+    report.add_argument("--output-md", type=Path)
+
     args = parser.parse_args()
     if args.command_name == "generate-case":
         catalog = FieldCatalog.from_yaml(args.catalog)
@@ -60,6 +67,17 @@ def main() -> None:
                 handle.write(json.dumps(item.to_dict(), sort_keys=True) + "\n")
         if args.summary:
             print(json.dumps(generator.summary(config), indent=2, sort_keys=True))
+        return
+
+    if args.command_name == "generate-report":
+        report_data = ReportGenerator.from_files(
+            campaign_path=args.campaign,
+            artifacts_dir=args.artifacts_dir,
+        ).build()
+        if args.output_json or args.output_md:
+            write_report_files(report_data, args.output_json, args.output_md)
+        else:
+            print(ReportGenerator.render_markdown(report_data))
         return
 
     fio_json = _load_json(args.fio_json)
