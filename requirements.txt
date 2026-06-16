@@ -1,0 +1,2 @@
+# Runtime has no third-party Python dependencies.
+# Python 3.11+ standard library is sufficient.
