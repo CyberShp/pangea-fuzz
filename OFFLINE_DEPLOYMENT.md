@@ -1,37 +1,35 @@
-# Offline Deployment
+# 离线部署说明
 
-This project is designed to be cloned from GitHub into an intranet without
-Python package downloads.
+这个项目设计目标是：上传到 GitHub 后，内网机器可以直接 clone 使用，不需要下载第三方 Python 包。
 
-## Included In The Minimal GitHub Repository
+## 最小 GitHub 仓库包含什么
 
-- Python package: `nvmetcp_tls_fuzz/`
-- Field catalog: `field_catalog.yaml`
-- Example config: `config.example.yaml`
-- CLI entrypoint: `python -m nvmetcp_tls_fuzz.cli`
-- Offline package helper: `scripts/package_offline.ps1`
+- Python 包：`nvmetcp_tls_fuzz/`
+- 字段字典：`field_catalog.yaml`
+- 配置模板：`config.example.yaml`
+- 命令入口：`python -m nvmetcp_tls_fuzz.cli`
+- 离线打包脚本：`scripts/package_offline.ps1`
 
-Tests and GitHub CI are intentionally omitted from the minimal pushed copy.
+按要求，最小推送版本不包含 `tests/` 和 `.github/` CI。
 
-## Python Requirements
+## Python 要求
 
-- Python 3.11 or newer.
-- No third-party Python runtime dependencies.
-- `requirements.txt` is intentionally empty except for comments.
+- Python 3.11 或更新版本。
+- 运行时没有第三方 Python 依赖。
+- `requirements.txt` 只有说明，没有需要安装的包。
 
-## Linux Host Tools Still Required
+## Linux 主机仍需准备的系统工具
 
-These are system tools and should be installed from the target environment's OS
-mirror or golden image:
+这些是系统级工具，不随 Python 仓库打包，需要从内网 OS 源或测试机镜像安装：
 
 - `nvme-cli`
 - `keyutils` / `keyctl`
 - `fio`
 - `tcpdump`
 - `iproute2`
-- `iptables` or `nftables`
+- `iptables` 或 `nftables`
 
-## Install From GitHub Clone
+## 从 GitHub 克隆后运行
 
 ```bash
 git clone <repo-url> nvmetcp-tls-fuzz
@@ -41,23 +39,37 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-## Run Without Installing
+生成 1,500,000 条默认 campaign：
 
 ```bash
-cd nvmetcp-tls-fuzz
 python -m nvmetcp_tls_fuzz.cli generate-campaign \
   --seed 20260617 \
   --output artifacts/campaign.jsonl \
   --summary
 ```
 
-## Create A Zip For Air-Gap Transfer
+生成中文报告：
 
-On Windows:
+```bash
+python -m nvmetcp_tls_fuzz.cli generate-report \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --output-md artifacts/fuzz-report.md \
+  --output-json artifacts/fuzz-report.json
+```
+
+## 制作离线 zip
+
+在 Windows 上执行：
 
 ```powershell
 .\scripts\package_offline.ps1
 ```
 
-This creates `dist\nvmetcp-tls-fuzz-offline.zip` with source, catalog, and docs,
-excluding caches and generated artifacts.
+输出：
+
+```text
+dist\nvmetcp-tls-fuzz-offline.zip
+```
+
+该 zip 包含源码、字段字典、配置模板和文档，不包含缓存、测试、CI 和运行产生的 artifacts。
