@@ -1,0 +1,18 @@
+target:
+  traddr: 192.0.2.10
+  trsvcid: 4420
+  subsysnqn: nqn.2026-06.example:nvmetcp-tls-fuzz
+host:
+  hostnqn: nqn.2014-08.org.nvmexpress:uuid:replace-me
+tls:
+  configured_key: "NVMeTLSkey-1:replace-with-fixed-sha256-configured-key"
+  keyring: ".nvme"
+safety:
+  allow_write: false
+  writable_subsystems: []
+  writable_devices: []
+fuzz:
+  catalog: field_catalog.yaml
+  seeds: [1, 2, 3]
+  artifacts_dir: artifacts
+  default_command: read
