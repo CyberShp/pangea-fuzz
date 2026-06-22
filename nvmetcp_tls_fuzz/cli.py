@@ -9,6 +9,7 @@ from .case_generator import CaseGenerator
 from .catalog import FieldCatalog
 from .oracle import OracleAnalyzer
 from .report import ReportGenerator, write_report_files
+from .run import RunConfig, RunOrchestrator
 
 
 def main() -> None:
@@ -44,6 +45,21 @@ def main() -> None:
     report.add_argument("--output-json", type=Path)
     report.add_argument("--output-md", type=Path)
 
+    run = subcommands.add_parser("run")
+    run.add_argument("--campaign", type=Path, required=True)
+    run.add_argument("--artifacts-dir", type=Path, required=True)
+    run.add_argument("--engine", choices=["fio", "vdbench"], default="fio")
+    run.add_argument("--device", required=True)
+    run.add_argument("--workers", type=int, default=1)
+    run.add_argument("--shard-index", type=int, default=0)
+    run.add_argument("--shard-count", type=int, default=1)
+    run.add_argument("--runtime", type=int, default=5)
+    run.add_argument("--timeout", type=int, default=120)
+    run.add_argument("--limit", type=int)
+    run.add_argument("--dry-run", action="store_true")
+    run.add_argument("--allow-write", action="store_true")
+    run.add_argument("--fio-template")
+
     args = parser.parse_args()
     if args.command_name == "generate-case":
         catalog = FieldCatalog.from_yaml(args.catalog)
@@ -78,6 +94,27 @@ def main() -> None:
             write_report_files(report_data, args.output_json, args.output_md)
         else:
             print(ReportGenerator.render_markdown(report_data))
+        return
+
+    if args.command_name == "run":
+        result = RunOrchestrator(
+            RunConfig(
+                campaign_path=args.campaign,
+                artifacts_dir=args.artifacts_dir,
+                engine=args.engine,
+                device=args.device,
+                workers=args.workers,
+                shard_index=args.shard_index,
+                shard_count=args.shard_count,
+                runtime_s=args.runtime,
+                timeout_s=args.timeout,
+                limit=args.limit,
+                dry_run=args.dry_run,
+                allow_write=args.allow_write,
+                fio_template=args.fio_template,
+            )
+        ).run()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return
 
     fio_json = _load_json(args.fio_json)
