@@ -25,6 +25,7 @@
 - `nvme-cli`
 - `keyutils` / `keyctl`
 - `fio`
+- `vdbench`（如果使用 `--engine vdbench`）
 - `tcpdump`
 - `iproute2`
 - `iptables` 或 `nftables`
@@ -47,6 +48,63 @@ python -m nvmetcp_tls_fuzz.cli generate-campaign \
   --output artifacts/campaign.jsonl \
   --summary
 ```
+
+先 dry-run 检查命令生成、分片和多进程调度：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 8 \
+  --limit 100 \
+  --dry-run
+```
+
+使用 fio 执行 campaign：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 8 \
+  --runtime 5 \
+  --timeout 120 \
+  --allow-write
+```
+
+使用 vdbench 执行 campaign：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine vdbench \
+  --device /dev/nvme1n1 \
+  --workers 4 \
+  --runtime 5 \
+  --timeout 120 \
+  --allow-write
+```
+
+多台内网机器并发时使用分片，例如 4 台机器分别使用 `--shard-count 4 --shard-index 0/1/2/3`。这样 150 万条用例会按 `campaign_index` 均匀切分，不需要手工拆文件：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts/shard-0 \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 8 \
+  --shard-count 4 \
+  --shard-index 0 \
+  --allow-write
+```
+
+注意：写类 workload 默认不会执行，必须显式加 `--allow-write`。只允许对 fake target 的内存 namespace 或白名单测试 namespace 打开。
 
 生成中文报告：
 
