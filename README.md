@@ -49,6 +49,92 @@ python -m nvmetcp_tls_fuzz.cli generate-campaign \
   --summary
 ```
 
+## 运行用例：fio / vdbench
+
+`generate-campaign` 只负责生成 corpus；真正把每条 case 转成 IO 压力并落盘执行结果，需要使用 `run` 子命令。`run` 会为每条 case 创建独立目录，保存 `case.yaml`、`command.json`、`stdout.log`、`stderr.log`、`summary.json`，后续 `generate-report` 会读取这些产物统计覆盖率和失败桶。
+
+先做 dry-run，确认命令、分片和并发都符合预期，不会真正调用 fio/vdbench：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 8 \
+  --dry-run
+```
+
+运行 fio：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 8 \
+  --runtime 5 \
+  --timeout 120 \
+  --allow-write
+```
+
+运行 vdbench：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine vdbench \
+  --device /dev/nvme1n1 \
+  --workers 4 \
+  --runtime 5 \
+  --timeout 120 \
+  --allow-write
+```
+
+`--allow-write` 是安全闸门：只要 case 映射到写 workload，默认会被标记为 `FAIL_INFRA` 并跳过真实执行。只有确认目标是内存 fake namespace 或白名单测试 namespace 时才打开。
+
+### 150 万次 campaign 的并发方式
+
+单机并发使用 `--workers`，内部用多进程执行 case，适合把 fio/vdbench 的启动、等待和日志收集并行化：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --workers 16 \
+  --runtime 3 \
+  --allow-write
+```
+
+多台机器并发使用分片，保证每台只跑 `campaign_index % shard_count == shard_index` 的子集。例如 4 台机器：
+
+```bash
+# 机器 0
+python -m nvmetcp_tls_fuzz.cli run --campaign artifacts/campaign.jsonl --artifacts-dir artifacts/shard-0 --engine fio --device /dev/nvme1n1 --workers 8 --shard-count 4 --shard-index 0 --allow-write
+
+# 机器 1
+python -m nvmetcp_tls_fuzz.cli run --campaign artifacts/campaign.jsonl --artifacts-dir artifacts/shard-1 --engine fio --device /dev/nvme1n1 --workers 8 --shard-count 4 --shard-index 1 --allow-write
+```
+
+150 万次不要一上来全速压满。建议顺序是：`--limit 100 --dry-run`，再 `--limit 1000` 冒烟，确认 controller 清理、reconnect、日志采集正常后，再扩大到全量。fio/vdbench 自己也有内部并发能力，外层 `--workers` 过大可能把阵列或主机打成压力测试，而不是协议 fuzz；推荐先从 CPU 核数的 1/4 到 1/2 起步。
+
+如果需要自定义 fio 参数，可以用 `--fio-template`，可用变量包括 `{case_id}`、`{device}`、`{rw}`、`{runtime}`、`{seed}`、`{field}`、`{strategy}`：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli run \
+  --campaign artifacts/campaign.jsonl \
+  --artifacts-dir artifacts \
+  --engine fio \
+  --device /dev/nvme1n1 \
+  --fio-template "--name={case_id} --filename={device} --rw={rw} --direct=1 --ioengine=libaio --bs=4k --iodepth=32 --time_based --runtime={runtime}" \
+  --workers 8 \
+  --allow-write
+```
+
 ## 分析单轮结果
 
 ```bash
