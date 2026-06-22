@@ -43,6 +43,7 @@ def main() -> None:
     run.add_argument("--shard-index", type=int, default=0)
     run.add_argument("--shard-count", type=int, default=1)
     run.add_argument("--stop-on-failure", action="store_true")
+    _add_runtime_args(run)
 
     replay = sub.add_parser("replay")
     replay.add_argument("case_path", type=Path)
@@ -50,6 +51,7 @@ def main() -> None:
     replay.add_argument("--artifacts-dir", type=Path, default=Path("artifacts/replay"))
     replay.add_argument("--dry-run", action="store_true")
     replay.add_argument("--allow-live-target", action="store_true")
+    _add_runtime_args(replay)
 
     minimize = sub.add_parser("minimize")
     minimize.add_argument("case_path", type=Path)
@@ -101,6 +103,14 @@ def main() -> None:
                 shard_index=args.shard_index,
                 shard_count=args.shard_count,
                 stop_on_failure=args.stop_on_failure,
+                run_id=args.run_id,
+                artifact_budget_gb=args.artifact_budget_gb,
+                free_space_floor_gb=args.free_space_floor_gb,
+                progress_interval_s=args.progress_interval,
+                quiet=args.quiet,
+                no_compress=args.no_compress,
+                keep_pass_full=args.keep_pass_full,
+                keep_pcap=args.keep_pcap,
             )
         ).run()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
@@ -120,6 +130,14 @@ def main() -> None:
                 dry_run=args.dry_run,
                 allow_live_target=args.allow_live_target,
                 limit=1,
+                run_id=args.run_id,
+                artifact_budget_gb=args.artifact_budget_gb,
+                free_space_floor_gb=args.free_space_floor_gb,
+                progress_interval_s=args.progress_interval,
+                quiet=args.quiet,
+                no_compress=args.no_compress,
+                keep_pass_full=args.keep_pass_full,
+                keep_pcap=args.keep_pcap,
             )
         ).run()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
@@ -161,6 +179,17 @@ def main() -> None:
 
     result = collect_env(args.config_path, args.output)
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+
+
+def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--run-id")
+    parser.add_argument("--artifact-budget-gb", type=float)
+    parser.add_argument("--free-space-floor-gb", type=float)
+    parser.add_argument("--progress-interval", type=float, default=5.0)
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--no-compress", action="store_true")
+    parser.add_argument("--keep-pass-full", action="store_true")
+    parser.add_argument("--keep-pcap", choices=["always", "never", "on-fail", "on-new-bucket"])
 
 
 if __name__ == "__main__":

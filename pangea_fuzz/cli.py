@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import load_pangea_config
 from .report import MultiModeReportGenerator, write_multi_mode_report
+from .runtime import inspect_run, pack_repro
 
 
 def main() -> None:
@@ -28,6 +29,14 @@ def main() -> None:
     config_cmd = sub.add_parser("show-config")
     config_cmd.add_argument("--config", type=Path)
 
+    inspect = sub.add_parser("inspect-run")
+    inspect.add_argument("--artifacts-dir", type=Path, required=True)
+    inspect.add_argument("--output-json", type=Path)
+
+    repro = sub.add_parser("pack-repro")
+    repro.add_argument("--case-dir", type=Path, required=True)
+    repro.add_argument("--output", type=Path, required=True)
+
     args = parser.parse_args()
     if args.mode == "nvmetcp-tls":
         _delegate("nvmetcp-tls-fuzz", "nvmetcp_tls_fuzz.cli", args.mode_args)
@@ -44,6 +53,17 @@ def main() -> None:
             write_multi_mode_report(data, args.output_json, args.output_md)
         else:
             print(MultiModeReportGenerator.render_markdown(data))
+        return
+    if args.mode == "inspect-run":
+        data = inspect_run(args.artifacts_dir)
+        if args.output_json:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
+            args.output_json.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        print(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
+        return
+    if args.mode == "pack-repro":
+        data = pack_repro(args.case_dir, args.output)
+        print(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
         return
     print(json.dumps(load_pangea_config(args.config), indent=2, ensure_ascii=False, sort_keys=True))
 

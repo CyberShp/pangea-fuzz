@@ -4,6 +4,32 @@ global:
   workers: 1
   shard_count: 1
   shard_index: 0
+artifact_policy:
+  max_total_gb: 200
+  stop_when_free_space_below_gb: 20
+  compression:
+    enabled: true
+    format: gzip
+  pass:
+    keep_full: false
+    keep_stdout_tail_kb: 16
+    keep_stderr_tail_kb: 16
+    keep_trace: true
+    keep_payload: false
+    keep_pcap: false
+  fail:
+    keep_full: true
+    keep_first_n_per_bucket: 5
+    keep_every_n_after: 100
+    keep_pcap: on_new_bucket
+    max_pcap_mb: 64
+    keep_payload: true
+  buckets:
+    key_fields: [mode, verdict, reason, operation_or_protocol_or_pdu, field, strategy]
+  pruning:
+    enabled: true
+    prune_pass_first: true
+    preserve_core: true
 modes:
   nvmetcp_tls:
     catalog: field_catalog.yaml

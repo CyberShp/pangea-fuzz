@@ -12,6 +12,7 @@ def load_catalog_yaml(text: str) -> dict[str, Any]:
     items are one-line flow mappings with scalar/list values.
     """
 
+    text = text.lstrip("\ufeff")
     fields: list[dict[str, Any]] = []
     for line in text.splitlines():
         stripped = line.strip()

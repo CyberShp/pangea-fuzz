@@ -5,6 +5,7 @@ from typing import Any
 
 
 def load_catalog_yaml(text: str) -> dict[str, Any]:
+    text = text.lstrip("\ufeff")
     fields: list[dict[str, Any]] = []
     metadata: dict[str, Any] = {}
     for line in text.splitlines():
@@ -23,6 +24,7 @@ def load_catalog_yaml(text: str) -> dict[str, Any]:
 
 
 def load_simple_yaml(text: str) -> dict[str, Any]:
+    text = text.lstrip("\ufeff")
     stripped = text.strip()
     if not stripped:
         return {}

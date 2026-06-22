@@ -23,6 +23,7 @@ $include = @(
     "pyproject.toml",
     "requirements.txt",
     "README.md",
+    "OFFLINE_DEPENDENCIES.md",
     "OFFLINE_DEPLOYMENT.md"
 )
 

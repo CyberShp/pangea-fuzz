@@ -20,10 +20,10 @@ class KvTraceEntry:
 
 
 class ArtifactWriter:
-    def __init__(self, root: str | Path, run_id: str | None = None):
+    def __init__(self, root: str | Path, run_id: str | None = None, *, use_run_subdir: bool = True):
         self.root = Path(root)
         self.run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        self.run_root = self.root / self.run_id
+        self.run_root = self.root / self.run_id if use_run_subdir else self.root
         self.case_dir: Path | None = None
 
     def start_case(self, case: dict[str, Any]) -> Path:

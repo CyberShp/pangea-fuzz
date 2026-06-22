@@ -47,6 +47,7 @@ def main() -> None:
     replay.add_argument("--dry-run", action="store_true")
     replay.add_argument("--allow-send", action="store_true")
     replay.add_argument("--tcpreplay-bin", default="tcpreplay")
+    _add_runtime_args(replay)
 
     report = sub.add_parser("generate-report")
     report.add_argument("--campaign", type=Path)
@@ -100,6 +101,14 @@ def main() -> None:
             dry_run=args.dry_run,
             allow_send=args.allow_send,
             tcpreplay_bin=args.tcpreplay_bin,
+            run_id=args.run_id,
+            artifact_budget_gb=args.artifact_budget_gb,
+            free_space_floor_gb=args.free_space_floor_gb,
+            progress_interval_s=args.progress_interval,
+            quiet=args.quiet,
+            no_compress=args.no_compress,
+            keep_pass_full=args.keep_pass_full,
+            keep_pcap=args.keep_pcap,
         )
         result = NetProtocolRunner(config).replay(args.pcap)
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
@@ -129,6 +138,18 @@ def _add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
+    _add_runtime_args(parser)
+
+
+def _add_runtime_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--run-id")
+    parser.add_argument("--artifact-budget-gb", type=float)
+    parser.add_argument("--free-space-floor-gb", type=float)
+    parser.add_argument("--progress-interval", type=float, default=5.0)
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--no-compress", action="store_true")
+    parser.add_argument("--keep-pass-full", action="store_true")
+    parser.add_argument("--keep-pcap", choices=["always", "never", "on-fail", "on-new-bucket"])
 
 
 def _run_config(
@@ -150,6 +171,14 @@ def _run_config(
         allow_disruptive=allow_disruptive,
         iface_allowlist=iface_allowlist,
         forbid_default_route_iface=forbid_default_route_iface,
+        run_id=args.run_id,
+        artifact_budget_gb=args.artifact_budget_gb,
+        free_space_floor_gb=args.free_space_floor_gb,
+        progress_interval_s=args.progress_interval,
+        quiet=args.quiet,
+        no_compress=args.no_compress,
+        keep_pass_full=args.keep_pass_full,
+        keep_pcap=args.keep_pcap,
         shard_index=args.shard_index,
         shard_count=args.shard_count,
     )

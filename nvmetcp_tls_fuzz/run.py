@@ -6,7 +6,17 @@ import json
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 from typing import Any, Iterator
+
+from pangea_fuzz.runtime import (
+    RunContext,
+    RuntimeOptions,
+    build_bucket_key,
+    default_missing_evidence,
+    evidence_record,
+    trust_level_for,
+)
 
 
 WRITE_COMMANDS = {"write", "randwrite", "rw", "randrw"}
@@ -27,6 +37,15 @@ class RunConfig:
     limit: int | None = None
     timeout_s: int = 120
     fio_template: str | None = None
+    run_id: str | None = None
+    artifact_policy: dict[str, Any] | None = None
+    artifact_budget_gb: float | None = None
+    free_space_floor_gb: float | None = None
+    progress_interval_s: float = 5.0
+    quiet: bool = False
+    no_compress: bool = False
+    keep_pass_full: bool = False
+    keep_pcap: str | None = None
 
     def __post_init__(self) -> None:
         if self.engine not in {"fio", "vdbench"}:
@@ -123,6 +142,31 @@ class RunOrchestrator:
 
     def run(self) -> dict[str, Any]:
         self.config.artifacts_dir.mkdir(parents=True, exist_ok=True)
+        context = RunContext(
+            mode="nvmetcp_tls",
+            artifacts_dir=self.config.artifacts_dir,
+            campaign_path=self.config.campaign_path,
+            catalog_path=Path("field_catalog.yaml"),
+            artifact_policy_config=self.config.artifact_policy,
+            options=RuntimeOptions(
+                run_id=self.config.run_id,
+                artifact_budget_gb=self.config.artifact_budget_gb,
+                free_space_floor_gb=self.config.free_space_floor_gb,
+                progress_interval_s=self.config.progress_interval_s,
+                quiet=self.config.quiet,
+                no_compress=self.config.no_compress,
+                keep_pass_full=self.config.keep_pass_full,
+                keep_pcap=self.config.keep_pcap,
+            ),
+            tool_paths={
+                "nvme": "nvme",
+                self.config.engine: self.config.engine,
+                "keyctl": "keyctl",
+                "tcpdump": "tcpdump",
+            },
+            command_line=sys.argv[:],
+        )
+        context.start()
         planned = 0
         selected_count = 0
         executed_count = 0
@@ -130,42 +174,80 @@ class RunOrchestrator:
         selected_limit_reached = False
 
         worker_config = _WorkerConfig.from_run_config(self.config)
-        if self.config.workers == 1:
-            for ordinal, case in enumerate(_read_campaign(self.config.campaign_path)):
-                planned += 1
-                if not self._case_selected(case, ordinal) or selected_limit_reached:
-                    continue
-                selected_count += 1
-                _record_verdict(verdict_counts, _run_one_case(worker_config, case))
-                executed_count += 1
-                if self.config.limit is not None and selected_count >= self.config.limit:
-                    selected_limit_reached = True
-        else:
-            inflight: set[Future] = set()
-            max_inflight = max(self.config.workers * 4, 1)
-            with ProcessPoolExecutor(max_workers=self.config.workers) as executor:
+        try:
+            if self.config.workers == 1:
                 for ordinal, case in enumerate(_read_campaign(self.config.campaign_path)):
                     planned += 1
+                    context.planned_cases = planned
+                    context.ledger(case, "planned")
                     if not self._case_selected(case, ordinal) or selected_limit_reached:
+                        if selected_limit_reached:
+                            context.case_skipped(case, "limit reached")
+                        continue
+                    if context.should_stop_for_disk():
+                        context.case_skipped(case, "disk budget exhausted")
+                        selected_limit_reached = True
                         continue
                     selected_count += 1
-                    inflight.add(executor.submit(_run_one_case, worker_config, case))
+                    context.case_selected(case)
+                    context.case_started(case)
+                    context.ledger(case, "command_built", detail={"engine": self.config.engine})
+                    summary = _run_one_case(worker_config, case)
+                    context.case_finished(case, summary)
+                    _record_verdict(verdict_counts, summary)
+                    executed_count += 1
                     if self.config.limit is not None and selected_count >= self.config.limit:
                         selected_limit_reached = True
-                    if len(inflight) >= max_inflight:
-                        done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
-                        for future in done:
-                            _record_verdict(verdict_counts, future.result())
-                            executed_count += 1
+            else:
+                inflight: dict[Future, dict[str, Any]] = {}
+                max_inflight = max(self.config.workers * 4, 1)
+                with ProcessPoolExecutor(max_workers=self.config.workers) as executor:
+                    for ordinal, case in enumerate(_read_campaign(self.config.campaign_path)):
+                        planned += 1
+                        context.planned_cases = planned
+                        context.ledger(case, "planned")
+                        if not self._case_selected(case, ordinal) or selected_limit_reached:
+                            if selected_limit_reached:
+                                context.case_skipped(case, "limit reached")
+                            continue
+                        if context.should_stop_for_disk():
+                            context.case_skipped(case, "disk budget exhausted")
+                            selected_limit_reached = True
+                            continue
+                        selected_count += 1
+                        context.case_selected(case)
+                        context.case_started(case)
+                        context.ledger(case, "command_built", detail={"engine": self.config.engine})
+                        future = executor.submit(_run_one_case, worker_config, case)
+                        inflight[future] = case
+                        if self.config.limit is not None and selected_count >= self.config.limit:
+                            selected_limit_reached = True
+                        if len(inflight) >= max_inflight:
+                            done, _ = wait(set(inflight), return_when=FIRST_COMPLETED)
+                            for future in done:
+                                case_for_future = inflight.pop(future)
+                                summary = future.result()
+                                context.case_finished(case_for_future, summary)
+                                _record_verdict(verdict_counts, summary)
+                                executed_count += 1
 
-                while inflight:
-                    done, inflight = wait(inflight, return_when=FIRST_COMPLETED)
-                    for future in done:
-                        _record_verdict(verdict_counts, future.result())
-                        executed_count += 1
+                    while inflight:
+                        done, _ = wait(set(inflight), return_when=FIRST_COMPLETED)
+                        for future in done:
+                            case_for_future = inflight.pop(future)
+                            summary = future.result()
+                            context.case_finished(case_for_future, summary)
+                            _record_verdict(verdict_counts, summary)
+                            executed_count += 1
+        finally:
+            context.planned_cases = planned
+            context.selected_cases = selected_count
+            context.finished_cases = executed_count
+            run_summary = context.finalize()
 
         return {
             "run_schema": "nvmetcp_tls_fuzz_run.v1",
+            "run_id": context.run_id,
             "campaign_path": str(self.config.campaign_path),
             "artifacts_dir": str(self.config.artifacts_dir),
             "engine": self.config.engine,
@@ -177,6 +259,8 @@ class RunOrchestrator:
             "shard_count": self.config.shard_count,
             "dry_run": self.config.dry_run,
             "verdict_counts": dict(sorted(verdict_counts.items())),
+            "trust_level": run_summary.get("trust_level"),
+            "artifact_bytes": run_summary.get("artifact_bytes"),
         }
 
     def _case_selected(self, case: dict[str, Any], ordinal: int) -> bool:
@@ -232,7 +316,9 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
             "returncode": None,
             "engine": config.engine,
             "dry_run": config.dry_run,
+            "evidence": [evidence_record("safety_gate", "runner", "summary.json", "--allow-write", "matched")],
         }
+        _finalize_summary(summary, case)
         _write_json(run_dir / "summary.json", summary)
         return summary
 
@@ -243,7 +329,9 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
             "returncode": 0,
             "engine": config.engine,
             "dry_run": True,
+            "evidence": [evidence_record("command_planned", config.engine, "command.json", "dry-run", "matched")],
         }
+        _finalize_summary(summary, case)
         _write_json(run_dir / "summary.json", summary)
         return summary
 
@@ -265,8 +353,10 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
             "returncode": None,
             "engine": config.engine,
             "dry_run": False,
+            "evidence": [evidence_record("tool_missing", config.engine, "stderr.log", command[0], "matched")],
         }
         _write_text(run_dir / "stderr.log", str(exc))
+        _finalize_summary(summary, case)
         _write_json(run_dir / "summary.json", summary)
         return summary
     except subprocess.TimeoutExpired as exc:
@@ -278,7 +368,9 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
             "returncode": None,
             "engine": config.engine,
             "dry_run": False,
+            "evidence": [evidence_record("timeout", config.engine, "stderr.log", "timeout", "matched")],
         }
+        _finalize_summary(summary, case)
         _write_json(run_dir / "summary.json", summary)
         return summary
 
@@ -295,7 +387,18 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
         "returncode": completed.returncode,
         "engine": config.engine,
         "dry_run": False,
+        "evidence": [
+            evidence_record(f"{config.engine}_returncode", config.engine, "stdout.log", str(completed.returncode), "matched"),
+            evidence_record(
+                "stderr_pattern",
+                config.engine,
+                "stderr.log",
+                "error|timeout|reset",
+                "not_matched" if completed.returncode == 0 else "matched",
+            ),
+        ],
     }
+    _finalize_summary(summary, case)
     _write_json(run_dir / "summary.json", summary)
     return summary
 
@@ -331,6 +434,21 @@ def _count_verdicts(summaries: list[dict[str, Any]]) -> dict[str, int]:
 def _record_verdict(counts: dict[str, int], summary: dict[str, Any]) -> None:
     verdict = str(summary.get("verdict", "<unknown>"))
     counts[verdict] = counts.get(verdict, 0) + 1
+
+
+def _finalize_summary(summary: dict[str, Any], case: dict[str, Any]) -> None:
+    mutation = case.get("mutation", {})
+    if not isinstance(mutation, dict):
+        mutation = {}
+    summary.setdefault("mode", "nvmetcp_tls")
+    summary.setdefault("pdu_type", case.get("pdu_type"))
+    summary.setdefault("command", case.get("command"))
+    summary.setdefault("field", mutation.get("field"))
+    summary.setdefault("strategy", mutation.get("strategy"))
+    summary.setdefault("bucket_key", build_bucket_key("nvmetcp_tls", summary, case))
+    summary.setdefault("trust_level", trust_level_for("nvmetcp_tls"))
+    summary.setdefault("missing_evidence", default_missing_evidence("nvmetcp_tls"))
+    summary.setdefault("artifact_policy", "managed-by-run-context")
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:

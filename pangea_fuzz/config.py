@@ -13,6 +13,38 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "shard_count": 1,
         "shard_index": 0,
     },
+    "artifact_policy": {
+        "max_total_gb": 200,
+        "stop_when_free_space_below_gb": 20,
+        "compression": {
+            "enabled": True,
+            "format": "gzip",
+        },
+        "pass": {
+            "keep_full": False,
+            "keep_stdout_tail_kb": 16,
+            "keep_stderr_tail_kb": 16,
+            "keep_trace": True,
+            "keep_payload": False,
+            "keep_pcap": False,
+        },
+        "fail": {
+            "keep_full": True,
+            "keep_first_n_per_bucket": 5,
+            "keep_every_n_after": 100,
+            "keep_pcap": "on_new_bucket",
+            "max_pcap_mb": 64,
+            "keep_payload": True,
+        },
+        "buckets": {
+            "key_fields": ["mode", "verdict", "reason", "operation_or_protocol_or_pdu", "field", "strategy"],
+        },
+        "pruning": {
+            "enabled": True,
+            "prune_pass_first": True,
+            "preserve_core": True,
+        },
+    },
     "modes": {
         "nvmetcp_tls": {
             "catalog": "field_catalog.yaml",
@@ -59,6 +91,7 @@ def load_pangea_config(path: str | Path | None = None) -> dict[str, Any]:
 
 
 def load_simple_yaml(text: str) -> dict[str, Any]:
+    text = text.lstrip("\ufeff")
     stripped = text.strip()
     if not stripped:
         return {}

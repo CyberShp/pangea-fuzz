@@ -59,6 +59,14 @@ def main() -> None:
     run.add_argument("--dry-run", action="store_true")
     run.add_argument("--allow-write", action="store_true")
     run.add_argument("--fio-template")
+    run.add_argument("--run-id")
+    run.add_argument("--artifact-budget-gb", type=float)
+    run.add_argument("--free-space-floor-gb", type=float)
+    run.add_argument("--progress-interval", type=float, default=5.0)
+    run.add_argument("--quiet", action="store_true")
+    run.add_argument("--no-compress", action="store_true")
+    run.add_argument("--keep-pass-full", action="store_true")
+    run.add_argument("--keep-pcap", choices=["always", "never", "on-fail", "on-new-bucket"])
 
     args = parser.parse_args()
     if args.command_name == "generate-case":
@@ -112,6 +120,14 @@ def main() -> None:
                 dry_run=args.dry_run,
                 allow_write=args.allow_write,
                 fio_template=args.fio_template,
+                run_id=args.run_id,
+                artifact_budget_gb=args.artifact_budget_gb,
+                free_space_floor_gb=args.free_space_floor_gb,
+                progress_interval_s=args.progress_interval,
+                quiet=args.quiet,
+                no_compress=args.no_compress,
+                keep_pass_full=args.keep_pass_full,
+                keep_pcap=args.keep_pcap,
             )
         ).run()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
