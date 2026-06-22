@@ -1,15 +1,38 @@
 # NVMe/TCP TLS Fuzz 测试使用手册
 
-本项目用于构建 NVMe/TCP TLS 协议字段 fuzz 测试的用例生成、执行编排和报告归档流程。当前仓库已经提供：
+本项目现在是 Pangea Fuzz 多模式平台，用于把 NVMe/TCP TLS、NVMe KV over NOF、网络协议包 fuzz 放到同一套执行和报告框架里。当前仓库已经提供：
 
 - 基于 `field_catalog.yaml` 的 grammar-aware 用例生成。
+- 基于 `kv_field_catalog.yaml` 的 NVMe KV command set fuzz。
+- 基于 `net_field_catalog.yaml` 的 Ethernet/ARP/IP/ICMP/TCP/UDP 协议包 fuzz。
 - 150 万级 campaign 的流式生成。
 - `fio` / `vdbench` workload 执行编排。
 - 单机多进程和多机分片。
 - 每个 case 的执行产物归档。
 - 中文 JSON / Markdown 覆盖率和错误报告。
 
-当前仓库需要特别注意的一点：`fake_target.py` 和 `split_proxy.py` 是可复用模块，不是已经封装好的一键启动 CLI。也就是说，当前可直接落地的测试路径是“生成 fuzz case -> 用 fio/vdbench 跑 workload -> 归档结果 -> 生成报告”；协议级 PDU 注入链路需要后续把 fake target / split proxy 接入运行器，或由测试环境外部脚本启动。
+顶层入口是：
+
+```bash
+python -m pangea_fuzz.cli <mode> <command>
+```
+
+三个 mode：
+
+```text
+nvmetcp-tls   NVMe/TCP TLS 连接和 IO workload fuzz
+nvme-kv       NVMe Key Value Command Set over NOF fuzz
+net-protocol  Ethernet / ARP / IPv4 / IPv6 / ICMP / TCP / UDP 协议包 fuzz
+```
+
+旧入口仍保留：
+
+```bash
+python -m nvmetcp_tls_fuzz.cli ...
+python -m nvme_kv_fuzz.cli ...
+```
+
+当前仓库需要特别注意的一点：`fake_target.py` 和 `split_proxy.py` 是可复用模块，不是已经封装好的一键启动 CLI。也就是说，当前 `nvmetcp-tls run` 会消费 campaign 并驱动 fio/vdbench 产生 IO 与报告产物；协议级 PDU 注入链路需要后续把 fake target / split proxy 接入运行器，或由测试环境外部脚本启动。
 
 ## 1. 测试拓扑
 
@@ -60,8 +83,10 @@ pip install -e .
 验证 CLI 是否可用：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli --help
-python -m nvmetcp_tls_fuzz.cli run --help
+python -m pangea_fuzz.cli --help
+python -m pangea_fuzz.cli nvmetcp-tls --help
+python -m pangea_fuzz.cli nvme-kv --help
+python -m pangea_fuzz.cli net-protocol --help
 ```
 
 ### 2.2 Linux 系统工具
@@ -185,12 +210,12 @@ sudo nvme connect -t tcp -a $TRADDR -s $TRSVCID -n $SUBSYSNQN
 
 ## 4. 生成 campaign
 
-### 4.1 生成单条 case
+### 4.1 NVMe/TCP TLS case
 
 先用单条 case 确认字段字典和生成器正常：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli generate-case \
+python -m pangea_fuzz.cli nvmetcp-tls generate-case \
   --seed 1337 \
   --direction target \
   --pdu-type c2hdata \
@@ -204,7 +229,7 @@ python -m nvmetcp_tls_fuzz.cli generate-case \
 ```bash
 mkdir -p artifacts
 
-python -m nvmetcp_tls_fuzz.cli generate-campaign \
+python -m pangea_fuzz.cli nvmetcp-tls generate-campaign \
   --seed 20260617 \
   --count 100 \
   --random-ratio 0.2 \
@@ -222,7 +247,7 @@ head -n 3 artifacts/campaign-smoke.jsonl
 ### 4.3 全量 150 万 campaign
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli generate-campaign \
+python -m pangea_fuzz.cli nvmetcp-tls generate-campaign \
   --seed 20260617 \
   --count 1500000 \
   --random-ratio 0.1 \
@@ -232,6 +257,26 @@ python -m nvmetcp_tls_fuzz.cli generate-campaign \
 
 默认 count 本来就是 150 万，上面显式写出是为了测试记录更清楚。
 
+### 4.4 KV campaign
+
+```bash
+python -m pangea_fuzz.cli nvme-kv generate-campaign \
+  --seed 20260622 \
+  --count 100 \
+  --output artifacts/kv-campaign-smoke.jsonl \
+  --summary
+```
+
+### 4.5 网络协议 campaign
+
+```bash
+python -m pangea_fuzz.cli net-protocol generate-campaign \
+  --seed 20260622 \
+  --count 100 \
+  --output artifacts/net-campaign-smoke.jsonl \
+  --summary
+```
+
 ## 5. Dry-run 验证执行编排
 
 `run` 子命令会把 campaign 中每条 case 映射成 fio/vdbench 命令，并为每条 case 写入独立产物目录。
@@ -239,7 +284,7 @@ python -m nvmetcp_tls_fuzz.cli generate-campaign \
 先不要真实跑 IO，做 dry-run：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-smoke-dry \
   --engine fio \
@@ -277,7 +322,7 @@ cat artifacts/run-smoke-dry/case-0/summary.json
 ```bash
 DEV=/dev/nvme1n1
 
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-fio-read-smoke \
   --engine fio \
@@ -295,7 +340,7 @@ python -m nvmetcp_tls_fuzz.cli run \
 只有目标是 fake target 的内存 namespace 或白名单测试 namespace 时，才允许写入：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-fio-write-smoke \
   --engine fio \
@@ -318,7 +363,7 @@ python -m nvmetcp_tls_fuzz.cli run \
 示例：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-fio-custom \
   --engine fio \
@@ -338,7 +383,7 @@ python -m nvmetcp_tls_fuzz.cli run \
 vdbench 会为每个 case 生成独立参数文件 `vdbench.parm`：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-vdbench-smoke \
   --engine vdbench \
@@ -350,6 +395,107 @@ python -m nvmetcp_tls_fuzz.cli run \
   --allow-write
 ```
 
+## 8. KV mode 测试
+
+KV mode 通过 `nvme io-passthru` 运行 KV command set case。真实阵列执行必须显式打开 `--allow-live-target`，否则只允许 dry-run。
+
+配置文件示例见 `config.example.yaml` 或 `pangea.config.yaml` 中的 `modes.nvme_kv`。
+
+dry-run：
+
+```bash
+python -m pangea_fuzz.cli nvme-kv run \
+  --campaign artifacts/kv-campaign-smoke.jsonl \
+  --config config.example.yaml \
+  --artifacts-dir artifacts/kv-run-dry \
+  --dry-run
+```
+
+真实测试阵列：
+
+```bash
+python -m pangea_fuzz.cli nvme-kv run \
+  --campaign artifacts/kv-campaign-smoke.jsonl \
+  --config config.example.yaml \
+  --artifacts-dir artifacts/kv-run-live \
+  --limit 100 \
+  --allow-live-target
+```
+
+复现和最小化：
+
+```bash
+python -m pangea_fuzz.cli nvme-kv replay artifacts/kv-run-live/run-*/case-0-seed-*/case.yaml \
+  --config config.example.yaml \
+  --dry-run
+
+python -m pangea_fuzz.cli nvme-kv minimize artifacts/kv-run-live/run-*/case-0-seed-*/case.yaml \
+  --config config.example.yaml \
+  --output artifacts/minimized-kv-case.json
+```
+
+## 9. 网络协议 mode 测试
+
+`net-protocol` 是独立协议 mode，覆盖 Ethernet、ARP、IPv4、IPv6、ICMP、ICMPv6、TCP、UDP。默认只生成 pcap，不发包。
+
+生成可审查 pcap：
+
+```bash
+python -m pangea_fuzz.cli net-protocol generate-pcap \
+  --campaign artifacts/net-campaign-smoke.jsonl \
+  --artifacts-dir artifacts/net-run-pcap \
+  --limit 100
+```
+
+检查：
+
+```bash
+tcpdump -nn -r artifacts/net-run-pcap/packets.pcap
+cat artifacts/net-run-pcap/packet-trace.jsonl
+```
+
+dry-run 发包计划：
+
+```bash
+python -m pangea_fuzz.cli net-protocol send \
+  --campaign artifacts/net-campaign-smoke.jsonl \
+  --artifacts-dir artifacts/net-send-dry \
+  --iface eth-test \
+  --limit 10 \
+  --dry-run
+```
+
+真实发包必须显式授权：
+
+```bash
+python -m pangea_fuzz.cli net-protocol send \
+  --campaign artifacts/net-campaign-smoke.jsonl \
+  --artifacts-dir artifacts/net-send-live \
+  --iface eth-test \
+  --iface-allowlist eth-test \
+  --allow-default-route-iface \
+  --allow-send \
+  --limit 10
+```
+
+高风险协议包，例如 ARP、IPv6 ND/RA、TCP RST/异常顺序，需要额外：
+
+```bash
+--allow-disruptive
+```
+
+pcap replay：
+
+```bash
+python -m pangea_fuzz.cli net-protocol replay \
+  --pcap artifacts/net-run-pcap/packets.pcap \
+  --artifacts-dir artifacts/net-replay \
+  --iface eth-test \
+  --dry-run
+```
+
+真实 replay 同样必须 `--allow-send`。
+
 检查参数文件：
 
 ```bash
@@ -357,14 +503,14 @@ find artifacts/run-vdbench-smoke -name vdbench.parm | head
 cat artifacts/run-vdbench-smoke/case-0/vdbench.parm
 ```
 
-## 8. 多进程和多机器分片
+## 10. 多进程和多机器分片
 
-### 8.1 单机多进程
+### 10.1 单机多进程
 
 `--workers` 使用多进程执行 case。内部是有界队列，不会一次性提交 150 万个任务。
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-150w.jsonl \
   --artifacts-dir artifacts/run-150w-host0 \
   --engine fio \
@@ -377,13 +523,13 @@ python -m nvmetcp_tls_fuzz.cli run \
 
 建议从 CPU 核数的 1/4 到 1/2 起步。`fio` / `vdbench` 自身也有并发能力，`--workers` 太大可能把测试变成压力测试。
 
-### 8.2 多机分片
+### 10.2 多机分片
 
 4 台机器并发时，每台机器使用同一个 campaign 文件，但设置不同的 `--shard-index`：
 
 ```bash
 # 机器 0
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-150w.jsonl \
   --artifacts-dir artifacts/run-150w-shard0 \
   --engine fio \
@@ -395,7 +541,7 @@ python -m nvmetcp_tls_fuzz.cli run \
   --allow-write
 
 # 机器 1
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-150w.jsonl \
   --artifacts-dir artifacts/run-150w-shard1 \
   --engine fio \
@@ -413,16 +559,45 @@ python -m nvmetcp_tls_fuzz.cli run \
 campaign_index % shard_count == shard_index
 ```
 
-## 9. 生成报告
+## 11. 生成报告
 
-对单个 run 目录生成报告：
+对 TLS 单个 run 目录生成报告：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli generate-report \
+python -m pangea_fuzz.cli nvmetcp-tls generate-report \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-fio-write-smoke \
   --output-md artifacts/fuzz-report-smoke.md \
   --output-json artifacts/fuzz-report-smoke.json
+```
+
+KV 报告：
+
+```bash
+python -m pangea_fuzz.cli nvme-kv generate-report \
+  --campaign artifacts/kv-campaign-smoke.jsonl \
+  --artifacts-dir artifacts/kv-run-dry \
+  --output-md artifacts/kv-report.md \
+  --output-json artifacts/kv-report.json
+```
+
+网络协议报告：
+
+```bash
+python -m pangea_fuzz.cli net-protocol generate-report \
+  --campaign artifacts/net-campaign-smoke.jsonl \
+  --artifacts-dir artifacts/net-run-pcap \
+  --output-md artifacts/net-report.md \
+  --output-json artifacts/net-report.json
+```
+
+多模式总览报告：
+
+```bash
+python -m pangea_fuzz.cli generate-report \
+  --artifacts-root artifacts \
+  --output-md artifacts/pangea-report.md \
+  --output-json artifacts/pangea-report.json
 ```
 
 查看摘要：
@@ -445,14 +620,14 @@ cat artifacts/fuzz-report-smoke.md
 多机分片后，可以把各机器的 `artifacts/run-150w-shard*` 拷贝回同一目录，再对父目录生成报告：
 
 ```bash
-python -m nvmetcp_tls_fuzz.cli generate-report \
+python -m pangea_fuzz.cli nvmetcp-tls generate-report \
   --campaign artifacts/campaign-150w.jsonl \
   --artifacts-dir artifacts/all-shards \
   --output-md artifacts/fuzz-report-150w.md \
   --output-json artifacts/fuzz-report-150w.json
 ```
 
-## 10. Verdict 判定
+## 12. Verdict 判定
 
 允许结果：
 
@@ -470,7 +645,7 @@ python -m nvmetcp_tls_fuzz.cli generate-report \
 
 `FAIL_INFRA` 不一定是协议 bug，但必须先清掉，否则会污染覆盖率和失败率。
 
-## 11. 失败 case 复现
+## 13. 失败 case 复现
 
 每个 case 的目录通常包含：
 
@@ -512,7 +687,7 @@ nvme list-subsys -o json > $CASE_DIR/nvme-subsys-after.json
 ss -tnpi > $CASE_DIR/ss-after.txt
 ```
 
-## 12. 清理和恢复
+## 14. 清理和恢复
 
 每轮冒烟后建议主动清理：
 
@@ -538,9 +713,9 @@ sudo nvme connect -t tcp -a $TRADDR -s $TRSVCID -n $SUBSYSNQN
 nvme list
 ```
 
-## 13. 常见问题
+## 15. 常见问题
 
-### 13.1 dry-run 全是 PASS，但真实运行全是 FAIL_INFRA
+### 15.1 dry-run 全是 PASS，但真实运行全是 FAIL_INFRA
 
 检查 fio/vdbench 是否安装、是否在 `PATH` 中、当前用户是否有权限访问 `$DEV`。
 
@@ -550,7 +725,7 @@ fio --version
 ls -l $DEV
 ```
 
-### 13.2 写 case 被跳过
+### 15.2 写 case 被跳过
 
 这是预期安全行为。写类 workload 必须显式加：
 
@@ -560,7 +735,7 @@ ls -l $DEV
 
 只允许对内存 fake namespace 或白名单测试 namespace 使用。
 
-### 13.3 `planned_cases` 和 `selected_cases` 不一样
+### 15.3 `planned_cases` 和 `selected_cases` 不一样
 
 如果使用了 `--limit` 或分片，这是正常的：
 
@@ -568,7 +743,7 @@ ls -l $DEV
 - `selected_cases`：本轮实际选择执行的 case 数。
 - `executed_cases`：本轮已经处理并写 summary 的 case 数。
 
-### 13.4 浏览器能访问 GitHub，但 Git 不行
+### 15.4 浏览器能访问 GitHub，但 Git 不行
 
 如果 Windows 浏览器走本地代理，例如 `127.0.0.1:7890`，Git 也要配置代理：
 
@@ -584,7 +759,7 @@ git config --unset http.proxy
 git config --unset https.proxy
 ```
 
-### 13.5 当前版本是否已经真正做 PDU 注入
+### 15.5 当前版本是否已经真正做 PDU 注入
 
 当前 README 中的 `run` 路径会消费 campaign，并驱动 fio/vdbench 产生 IO 和报告产物。它还没有把每条 case 自动接入 `fake_target` 或 `split_proxy`，所以不会自动篡改 TLS 后明文 PDU。
 
@@ -597,21 +772,21 @@ git config --unset https.proxy
 
 这部分是下一步实现重点。
 
-## 14. 最小可跑命令清单
+## 16. 最小可跑命令清单
 
 下面是一条从生成到报告的最小闭环：
 
 ```bash
 mkdir -p artifacts
 
-python -m nvmetcp_tls_fuzz.cli generate-campaign \
+python -m pangea_fuzz.cli nvmetcp-tls generate-campaign \
   --seed 20260617 \
   --count 100 \
   --random-ratio 0.2 \
   --output artifacts/campaign-smoke.jsonl \
   --summary
 
-python -m nvmetcp_tls_fuzz.cli run \
+python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-smoke-dry \
   --engine fio \
@@ -620,7 +795,7 @@ python -m nvmetcp_tls_fuzz.cli run \
   --limit 20 \
   --dry-run
 
-python -m nvmetcp_tls_fuzz.cli generate-report \
+python -m pangea_fuzz.cli nvmetcp-tls generate-report \
   --campaign artifacts/campaign-smoke.jsonl \
   --artifacts-dir artifacts/run-smoke-dry \
   --output-md artifacts/fuzz-report-smoke.md \

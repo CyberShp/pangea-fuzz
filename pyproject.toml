@@ -7,3 +7,5 @@ dependencies = []
 
 [project.scripts]
 nvmetcp-tls-fuzz = "nvmetcp_tls_fuzz.cli:main"
+nvme-kv-fuzz = "nvme_kv_fuzz.cli:main"
+pangea-fuzz = "pangea_fuzz.cli:main"

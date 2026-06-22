@@ -1,0 +1,52 @@
+schema: net_protocol_field_catalog.v1
+description: Ethernet/ARP/IP/ICMP/TCP/UDP protocol fields for Pangea net_protocol mode
+fields:
+  - {path: ethernet.dst_mac, protocol: ethernet, bit_width: 48, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ethernet.src_mac, protocol: ethernet, bit_width: 48, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ethernet.ethertype, protocol: ethernet, bit_width: 16, strategies: [invalid_enum, random_value], oracle: must_reject_or_send}
+  - {path: ethernet.vlan_tag, protocol: ethernet, bit_width: 16, strategies: [legal_boundary, invalid_length, random_value], oracle: may_reject_or_send}
+  - {path: ethernet.frame_length, protocol: ethernet, bit_width: 16, strategies: [invalid_length, legal_boundary, random_value], oracle: must_reject_or_send}
+  - {path: arp.hwtype, protocol: arp, bit_width: 16, strategies: [invalid_enum, random_value], oracle: must_reject_or_send}
+  - {path: arp.ptype, protocol: arp, bit_width: 16, strategies: [invalid_enum, random_value], oracle: must_reject_or_send}
+  - {path: arp.hlen, protocol: arp, bit_width: 8, strategies: [invalid_length, random_value], oracle: must_reject_or_send}
+  - {path: arp.plen, protocol: arp, bit_width: 8, strategies: [invalid_length, random_value], oracle: must_reject_or_send}
+  - {path: arp.opcode, protocol: arp, bit_width: 16, strategies: [invalid_enum, sequence_error, random_value], oracle: must_reject_or_send}
+  - {path: arp.sender_mac, protocol: arp, bit_width: 48, strategies: [conflict_mapping, random_value], oracle: disruptive_requires_opt_in}
+  - {path: arp.target_ip, protocol: arp, bit_width: 32, strategies: [conflict_mapping, random_value], oracle: disruptive_requires_opt_in}
+  - {path: ipv4.version, protocol: ipv4, bit_width: 4, strategies: [invalid_enum, random_value], oracle: must_reject_or_send}
+  - {path: ipv4.ihl, protocol: ipv4, bit_width: 4, strategies: [invalid_length, legal_boundary, random_value], oracle: must_reject_or_send}
+  - {path: ipv4.dscp_ecn, protocol: ipv4, bit_width: 8, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv4.total_length, protocol: ipv4, bit_width: 16, strategies: [invalid_length, legal_boundary, random_value], oracle: must_reject_or_send}
+  - {path: ipv4.identification, protocol: ipv4, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv4.flags_fragment_offset, protocol: ipv4, bit_width: 16, strategies: [fragment_overlap, legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv4.ttl, protocol: ipv4, bit_width: 8, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv4.protocol, protocol: ipv4, bit_width: 8, strategies: [invalid_enum, random_value], oracle: must_reject_or_send}
+  - {path: ipv4.header_checksum, protocol: ipv4, bit_width: 16, strategies: [checksum_error, random_value], oracle: may_reject_or_send}
+  - {path: ipv4.options, protocol: ipv4, bit_width: 320, strategies: [invalid_length, unknown_option, random_value], oracle: must_reject_or_send}
+  - {path: ipv6.traffic_class, protocol: ipv6, bit_width: 8, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv6.flow_label, protocol: ipv6, bit_width: 20, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv6.payload_length, protocol: ipv6, bit_width: 16, strategies: [invalid_length, random_value], oracle: must_reject_or_send}
+  - {path: ipv6.next_header, protocol: ipv6, bit_width: 8, strategies: [invalid_enum, sequence_error, random_value], oracle: must_reject_or_send}
+  - {path: ipv6.hop_limit, protocol: ipv6, bit_width: 8, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: ipv6.extension_headers, protocol: ipv6, bit_width: 320, strategies: [invalid_length, sequence_error, random_value], oracle: must_reject_or_send}
+  - {path: icmp.type, protocol: icmp, bit_width: 8, strategies: [invalid_enum, legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: icmp.code, protocol: icmp, bit_width: 8, strategies: [invalid_enum, random_value], oracle: may_reject_or_send}
+  - {path: icmp.checksum, protocol: icmp, bit_width: 16, strategies: [checksum_error, random_value], oracle: may_reject_or_send}
+  - {path: icmp.echo_id_seq, protocol: icmp, bit_width: 32, strategies: [sequence_error, random_value], oracle: may_reject_or_send}
+  - {path: icmpv6.type, protocol: icmpv6, bit_width: 8, strategies: [invalid_enum, legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: icmpv6.code, protocol: icmpv6, bit_width: 8, strategies: [invalid_enum, random_value], oracle: may_reject_or_send}
+  - {path: icmpv6.nd_ra_ns_na, protocol: icmpv6, bit_width: 8, strategies: [sequence_error, random_value], oracle: disruptive_requires_opt_in}
+  - {path: tcp.src_port, protocol: tcp, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: tcp.dst_port, protocol: tcp, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: tcp.seq_ack, protocol: tcp, bit_width: 64, strategies: [sequence_error, random_value], oracle: may_reject_or_send}
+  - {path: tcp.data_offset, protocol: tcp, bit_width: 4, strategies: [invalid_length, random_value], oracle: must_reject_or_send}
+  - {path: tcp.flags, protocol: tcp, bit_width: 9, strategies: [sequence_error, reserved_nonzero, random_value], oracle: disruptive_requires_opt_in}
+  - {path: tcp.window, protocol: tcp, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: tcp.checksum, protocol: tcp, bit_width: 16, strategies: [checksum_error, random_value], oracle: may_reject_or_send}
+  - {path: tcp.urgent_pointer, protocol: tcp, bit_width: 16, strategies: [reserved_nonzero, random_value], oracle: may_reject_or_send}
+  - {path: tcp.options, protocol: tcp, bit_width: 320, strategies: [invalid_length, unknown_option, random_value], oracle: must_reject_or_send}
+  - {path: udp.src_port, protocol: udp, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: udp.dst_port, protocol: udp, bit_width: 16, strategies: [legal_boundary, random_value], oracle: may_reject_or_send}
+  - {path: udp.length, protocol: udp, bit_width: 16, strategies: [invalid_length, random_value], oracle: must_reject_or_send}
+  - {path: udp.checksum, protocol: udp, bit_width: 16, strategies: [checksum_error, random_value], oracle: may_reject_or_send}
+  - {path: udp.payload, protocol: udp, bit_width: 1024, strategies: [payload_mismatch, random_value], oracle: may_reject_or_send}

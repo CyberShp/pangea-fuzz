@@ -1,0 +1,44 @@
+active_mode: nvmetcp_tls
+global:
+  artifacts_dir: artifacts
+  workers: 1
+  shard_count: 1
+  shard_index: 0
+modes:
+  nvmetcp_tls:
+    catalog: field_catalog.yaml
+    target_traddr: 192.0.2.10
+    target_trsvcid: 4420
+    subsysnqn: nqn.2026-06.example:nvmetcp-tls-fuzz
+    device: /dev/nvme1n1
+    engine: fio
+    allow_write: false
+    tls_keyring: .nvme
+    tls_key_identity: NVMeTLSkey-1:replace-me
+  nvme_kv:
+    catalog: kv_field_catalog.yaml
+    device_path: /dev/nvme1n1
+    nsid: 1
+    target_nqn: nqn.2026-06.example:kv
+    allowed_model_or_serial: [TEST_ARRAY_MODEL_OR_SERIAL]
+    key_prefix: kvfuzz-test-
+    max_qps: 10
+    timeout_ms: 1000
+    allow_live_target: false
+  net_protocol:
+    catalog: net_field_catalog.yaml
+    iface: eth-test
+    target_mac: 02:00:00:00:00:02
+    target_ipv4: 192.0.2.10
+    target_ipv6: 2001:db8::10
+    tcp_ports: [4420]
+    udp_ports: [4420]
+    packet_engine: stdlib
+    pcap_only: true
+    max_pps: 100
+    max_duration_s: 30
+    iface_allowlist: [eth-test]
+    forbid_default_route_iface: true
+    allow_disruptive: false
+    allow_broadcast: false
+    allow_multicast: false

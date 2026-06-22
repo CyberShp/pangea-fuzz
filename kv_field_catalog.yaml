@@ -1,0 +1,23 @@
+schema: nvme_kv_field_catalog.v1
+description: Native NVMe Key Value Command Set fields for NOF fuzzing
+fields:
+  - {path: kv.opcode, name: opcode, operation: any, phase: command, bit_width: 8, strategies: [legal_boundary, random_value], legal_values: [0x01, 0x02, 0x06, 0x10, 0x14], invalid_values: [0x00, 0xff], oracle: must_reject_or_recover}
+  - {path: kv.nsid, name: nsid, operation: any, phase: precheck, bit_width: 32, strategies: [legal_boundary, random_value], legal_values: [1], invalid_values: [0, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw2, name: cdw2, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw3, name: cdw3, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw10, name: cdw10, operation: any, phase: command, bit_width: 32, strategies: [legal_boundary, length_mismatch, random_value], boundary_values: [0, 1, 16, 255, 256, 4096], invalid_values: [0, 4097, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw11, name: cdw11, operation: any, phase: command, bit_width: 32, strategies: [legal_boundary, length_mismatch, buffer_too_small, random_value], boundary_values: [0, 1, 4096, 8192, 1048576], invalid_values: [0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw12, name: cdw12, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw13, name: cdw13, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw14, name: cdw14, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.cdw15, name: cdw15, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.key_length, name: key_length, operation: any, phase: command, bit_width: 32, strategies: [legal_boundary, invalid_key_size, length_mismatch, random_value], boundary_values: [1, 16, 255], invalid_values: [0, 256, 4096], oracle: must_reject_or_recover}
+  - {path: kv.value_length, name: value_length, operation: any, phase: data_transfer, bit_width: 32, strategies: [legal_boundary, length_mismatch, buffer_too_small, random_value], boundary_values: [0, 1, 4096, 8192], invalid_values: [0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.host_buffer_size, name: host_buffer_size, operation: retrieve, phase: data_transfer, bit_width: 32, strategies: [buffer_too_small, legal_boundary, random_value], boundary_values: [0, 1, 4096], invalid_values: [0], oracle: must_reject_or_recover}
+  - {path: kv.option_bits, name: option_bits, operation: store, phase: command, bit_width: 8, strategies: [option_conflict, duplicate_store, random_value], legal_values: [0], invalid_values: [3, 255], oracle: must_reject_or_recover}
+  - {path: kv.reserved_bits, name: reserved_bits, operation: any, phase: command, bit_width: 32, strategies: [reserved_nonzero, random_value], legal_values: [0], invalid_values: [1, 0xffffffff], oracle: must_reject_or_recover}
+  - {path: kv.prp_sgl_direction, name: prp_sgl_direction, operation: any, phase: data_transfer, bit_width: 8, strategies: [option_conflict, random_value], legal_values: [0, 1], invalid_values: [2, 255], oracle: must_reject_or_recover}
+  - {path: kv.key_not_exist, name: key_not_exist, operation: retrieve, phase: semantic_verify, bit_width: 1, strategies: [key_not_exist], legal_values: [0], invalid_values: [1], oracle: must_reject_or_recover}
+  - {path: kv.delete_race, name: delete_race, operation: delete, phase: semantic_verify, bit_width: 1, strategies: [delete_race], legal_values: [0], invalid_values: [1], oracle: may_reject_or_succeed}
+  - {path: kv.list_prefix, name: list_prefix, operation: list, phase: semantic_verify, bit_width: 32, strategies: [list_prefix_boundary, legal_boundary], boundary_values: [0, 1, 16, 255], invalid_values: [4096], oracle: must_reject_or_recover}
+  - {path: kv.exist_missing, name: exist_missing, operation: exist, phase: semantic_verify, bit_width: 1, strategies: [key_not_exist, legal_boundary], legal_values: [0], invalid_values: [1], oracle: must_reject_or_recover}

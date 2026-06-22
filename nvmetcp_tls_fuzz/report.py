@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 import json
@@ -28,7 +28,7 @@ NIC_CHECKLIST = (
     {
         "item": "记录队列和中断亲和性",
         "command": "ethtool -l <iface>; ethtool -x <iface>; cat /proc/interrupts",
-        "reason": "多队列/RSS 会影响 NVMe/TCP 队列时序和 race 复现概率。",
+        "reason": "多队列和 RSS 会影响 NVMe/TCP 队列时序与 race 复现概率。",
     },
     {
         "item": "记录 MTU 和链路状态",
@@ -41,7 +41,7 @@ NIC_CHECKLIST = (
         "reason": "网络故障注入和断链恢复依赖 TCP 超时策略。",
     },
     {
-        "item": "记录 NVMe/TCP 模块参数和内核日志游标",
+        "item": "记录 NVMe/TCP 模块参数和内核日志",
         "command": "modinfo nvme_tcp; dmesg --ctime --color=never",
         "reason": "用于解释 reconnect、controller loss timeout、TLS/keyring 失败路径。",
     },
@@ -132,7 +132,7 @@ class ReportGenerator:
                 "coverage_matrix": "类似 AFL/libFuzzer/OSS-Fuzz 的覆盖率摘要；本项目按 PDU、字段、策略统计。",
                 "crash_buckets": "类似 ClusterFuzz crash bucket；本项目按 verdict、reason、PDU、字段聚合。",
                 "reproducer": "每个失败 run 需要保留 seed、case.yaml、PDU trace 和 host artifacts。",
-                "corpus": "campaign.jsonl 是输入 corpus；artifacts/ 是执行证据和失败样本集合。",
+                "corpus": "campaign.jsonl 是输入 corpus，artifacts/ 是执行证据和失败样本集合。",
             },
         }
 
@@ -173,13 +173,7 @@ class ReportGenerator:
         for verdict, count in execution["verdict_counts"].items():
             lines.append(f"| `{verdict}` | {count} |")
 
-        lines.extend(
-            [
-                "",
-                "## 4. Crash / 失败桶",
-                "",
-            ]
-        )
+        lines.extend(["", "## 4. Crash / 失败桶", ""])
         if failures:
             lines.extend(["| Verdict | 原因 | PDU | 字段 | 数量 | 复现路径 |", "|---|---|---|---|---:|---|"])
             for failure in failures[:50]:
@@ -190,26 +184,18 @@ class ReportGenerator:
         else:
             lines.append("未发现失败桶。")
 
-        lines.extend(
-            [
-                "",
-                "## 5. 网卡 / 主机配置检查清单",
-                "",
-                "| 检查项 | 命令 | 原因 |",
-                "|---|---|---|",
-            ]
-        )
+        lines.extend(["", "## 5. 网卡 / 主机配置检查清单", "", "| 检查项 | 命令 | 原因 |", "|---|---|---|"])
         for item in checklist:
             lines.append(f"| {item['item']} | `{item['command']}` | {item['reason']} |")
 
         lines.extend(
             [
                 "",
-                "## 6. 业界报告字段映射",
+                "## 6. 行业报告字段映射",
                 "",
                 "- AFL/libFuzzer 常见项：执行次数、crash、hang、corpus、覆盖率。本报告对应 campaign、verdict、artifacts、覆盖率矩阵。",
                 "- OSS-Fuzz/ClusterFuzz 常见项：crash bucket、可复现 testcase、日志、回归范围。本报告对应失败桶、case.yaml、pdu-trace、host artifacts。",
-                "- GitLab/CI fuzz 常见项：JSON report + artifacts.zip。本工具可输出 JSON 报告和 Markdown 报告，并保留 artifacts 目录。",
+                "- GitLab/CI fuzz 常见项：JSON report + artifacts.zip。本工具输出 JSON 报告和 Markdown 报告，并保留 artifacts 目录。",
                 "",
                 "## 7. 结论建议",
                 "",
@@ -241,6 +227,8 @@ class ReportGenerator:
         for summary_path in sorted(root.glob("**/summary.json")):
             run_dir = summary_path.parent
             summary = _load_json(summary_path)
+            if summary.get("run_schema") and not str(summary.get("run_schema")).startswith("nvmetcp"):
+                continue
             case = _load_case(run_dir / "case.yaml")
             runs.append({"run_dir": str(run_dir), "summary": summary, "case": case})
         return runs

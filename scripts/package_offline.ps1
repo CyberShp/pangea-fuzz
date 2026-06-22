@@ -13,8 +13,13 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 
 $include = @(
     "nvmetcp_tls_fuzz",
+    "nvme_kv_fuzz",
+    "pangea_fuzz",
     "field_catalog.yaml",
+    "kv_field_catalog.yaml",
+    "net_field_catalog.yaml",
     "config.example.yaml",
+    "pangea.config.yaml",
     "pyproject.toml",
     "requirements.txt",
     "README.md",
@@ -24,14 +29,23 @@ $include = @(
 foreach ($item in $include) {
     $source = Join-Path $root $item
     if (Test-Path -LiteralPath $source) {
-        Copy-Item -LiteralPath $source -Destination $staging -Recurse -Force
+        $target = Join-Path $staging $item
+        $targetParent = Split-Path -Parent $target
+        if ($targetParent) {
+            New-Item -ItemType Directory -Force -Path $targetParent | Out-Null
+        }
+        Copy-Item -LiteralPath $source -Destination $target -Recurse -Force
     }
 }
+
+Get-ChildItem -LiteralPath $staging -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $staging -Recurse -File | Where-Object { $_.Extension -in @(".pyc", ".pyo") } | Remove-Item -Force
 
 if (Test-Path -LiteralPath $outputPath) {
     Remove-Item -LiteralPath $outputPath -Force
 }
-Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $outputPath
+$stagingItems = Get-ChildItem -LiteralPath $staging
+Compress-Archive -Path $stagingItems.FullName -DestinationPath $outputPath
 Remove-Item -LiteralPath $staging -Recurse -Force
 
 Write-Host "Created $outputPath"
