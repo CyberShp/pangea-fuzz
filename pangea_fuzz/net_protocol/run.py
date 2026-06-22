@@ -23,6 +23,8 @@ class NetRunConfig:
     allow_disruptive: bool = False
     iface_allowlist: tuple[str, ...] = ()
     forbid_default_route_iface: bool = True
+    tcpreplay_bin: str = "tcpreplay"
+    tcpdump_bin: str = "tcpdump"
     max_pps: int = 100
     shard_index: int = 0
     shard_count: int = 1
@@ -114,7 +116,7 @@ class NetProtocolRunner:
         if not self.config.dry_run and not self.config.allow_send:
             raise PermissionError("net-protocol replay requires --allow-send")
         self.config.artifacts_dir.mkdir(parents=True, exist_ok=True)
-        argv = ["tcpreplay", "-i", self.config.iface, str(pcap_path)]
+        argv = [self.config.tcpreplay_bin, "-i", self.config.iface, str(pcap_path)]
         if self.config.dry_run:
             rc, stdout, stderr = 0, "dry-run replay planned\n", ""
         else:
@@ -128,7 +130,7 @@ class NetProtocolRunner:
             "stdout": stdout,
             "stderr": stderr,
             "verdict": "PASS_VALID" if rc == 0 else "PASS_REJECTED",
-            "reasons": ["replay completed" if rc == 0 else f"tcpreplay exited {rc}"],
+            "reasons": ["replay completed" if rc == 0 else f"{self.config.tcpreplay_bin} exited {rc}"],
         }
         (self.config.artifacts_dir / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
         return summary

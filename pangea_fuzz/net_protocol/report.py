@@ -39,7 +39,7 @@ class NetReportGenerator:
                 "checklist": [
                     {"item": "网卡状态", "command": "ip -d link; ethtool -k <iface>", "reason": "确认 MTU、offload 和链路状态。"},
                     {"item": "路由和邻居表", "command": "ip route; ip neigh", "reason": "避免 ARP/ND 测试污染环境后无法复现。"},
-                    {"item": "抓包", "command": "tcpdump -i <iface> -w net-protocol.pcap", "reason": "保存真实发包证据。"},
+                    {"item": "抓包", "command": "<tcpdump-bin> -i <iface> -w net-protocol.pcap", "reason": "保存真实发包证据；ARM 环境可替换为 tcpdump_aarch64。"},
                 ]
             },
         }

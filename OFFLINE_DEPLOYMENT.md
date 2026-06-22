@@ -32,9 +32,24 @@
 - `keyutils` / `keyctl`
 - `fio`
 - `vdbench`（如果使用 `--engine vdbench`）
-- `tcpdump`
 - `iproute2`
 - `iptables` 或 `nftables`
+
+可选工具：
+
+- `tcpdump`：只用于抓包、查看 pcap 和留证据；ARM 环境可用 `tcpdump_aarch64`。
+- `tcpreplay`：只在 `net-protocol replay` 真实回放 pcap 时需要；ARM 环境可用 `tcpreplay_aarch64`。
+
+这些可选工具不要求固定名字。比如：
+
+```bash
+python -m pangea_fuzz.cli net-protocol replay \
+  --pcap artifacts/net-run-pcap/packets.pcap \
+  --artifacts-dir artifacts/net-replay \
+  --iface eth-test \
+  --tcpreplay-bin /opt/fuzz/bin/tcpreplay_aarch64 \
+  --dry-run
+```
 
 ## 从 GitHub 克隆后运行
 

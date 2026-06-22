@@ -34,6 +34,9 @@ modes:
     tcp_ports: [4420]
     udp_ports: [4420]
     packet_engine: stdlib
+    tool_paths:
+      tcpdump: tcpdump
+      tcpreplay: tcpreplay
     pcap_only: true
     max_pps: 100
     max_duration_s: 30

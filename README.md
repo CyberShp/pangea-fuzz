@@ -96,7 +96,6 @@ python -m pangea_fuzz.cli net-protocol --help
 ```bash
 nvme version
 fio --version
-tcpdump --version
 keyctl --version
 ```
 
@@ -109,7 +108,20 @@ vdbench -h
 常用包名可能包括：
 
 ```bash
-nvme-cli fio tcpdump keyutils iproute2 ethtool
+nvme-cli fio keyutils iproute2 ethtool
+```
+
+`tcpdump` 和 `tcpreplay` 不是核心依赖：
+
+- `tcpdump` 只用于抓包、查看 pcap、留证据；不影响 campaign 生成、pcap 生成、dry-run。
+- `tcpreplay` 只在执行 `net-protocol replay` 且真实回放 pcap 时需要。
+- ARM 环境如果只有 `tcpdump_aarch64`、`tcpreplay_aarch64` 这种 777 可执行二进制，可以直接传完整路径或文件名。
+
+示例：
+
+```bash
+/opt/fuzz/bin/tcpdump_aarch64 --version
+/opt/fuzz/bin/tcpreplay_aarch64 --version
 ```
 
 ### 2.3 内核和网卡状态归档
@@ -454,6 +466,12 @@ tcpdump -nn -r artifacts/net-run-pcap/packets.pcap
 cat artifacts/net-run-pcap/packet-trace.jsonl
 ```
 
+如果环境里二进制叫 `tcpdump_aarch64`，直接替换命令即可：
+
+```bash
+/opt/fuzz/bin/tcpdump_aarch64 -nn -r artifacts/net-run-pcap/packets.pcap
+```
+
 dry-run 发包计划：
 
 ```bash
@@ -491,6 +509,7 @@ python -m pangea_fuzz.cli net-protocol replay \
   --pcap artifacts/net-run-pcap/packets.pcap \
   --artifacts-dir artifacts/net-replay \
   --iface eth-test \
+  --tcpreplay-bin /opt/fuzz/bin/tcpreplay_aarch64 \
   --dry-run
 ```
 
