@@ -163,9 +163,57 @@ modes:
     discover_before_connect: false
     disconnect_after_case: true
     connect_extra_args: [--tls]
+    tls_key:
+      source: env
+      env: PANGEA_NVME_TLS_KEY
+      identity: NVMeTLSkey-1:your-identity
+      keyring: "@u"
+      import: true
 ```
 
 `connect_extra_args` 用来适配不同 nvme-cli 版本的 TLS 参数；如果你们内网 nvme-cli 使用的是 `--tls_key`、`--keyring` 或其他参数，不需要改代码，直接写到这个列表里。
+
+TLS key 推荐由用户或测试环境先生成 configured key，Pangea 只读取环境变量或文件并导入 keyring。运行前：
+
+```bash
+export PANGEA_NVME_TLS_KEY="$(cat /secure/nvme-tls-configured-key.txt)"
+```
+
+然后配置：
+
+```yaml
+modes:
+  nvmetcp_tls:
+    tls_key:
+      source: env        # none | preloaded | env | file
+      env: PANGEA_NVME_TLS_KEY
+      identity: NVMeTLSkey-1:your-identity
+      keyring: "@u"
+      import: true
+```
+
+如果你们更愿意用文件：
+
+```yaml
+modes:
+  nvmetcp_tls:
+    tls_key:
+      source: file
+      file: /secure/nvme-tls-configured-key.txt
+      identity: NVMeTLSkey-1:your-identity
+      keyring: "@u"
+      import: true
+```
+
+Pangea 不会把 key 明文写入 `command.json`、`summary.json` 或日志；artifact 只记录来源、identity、keyring 和导入命令。已经手动导入 keyring 的环境可以使用：
+
+```yaml
+tls_key:
+  source: preloaded
+  identity: NVMeTLSkey-1:your-identity
+  keyring: "@u"
+  import: false
+```
 
 生成小 campaign：
 

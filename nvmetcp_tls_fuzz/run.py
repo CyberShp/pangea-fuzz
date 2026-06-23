@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
@@ -40,6 +41,7 @@ class RunConfig:
     fio_bin: str = "fio"
     vdbench_bin: str = "vdbench"
     nvme_bin: str = "nvme"
+    keyctl_bin: str = "keyctl"
     transport: str = "tcp"
     traddr: str = ""
     trsvcid: str = ""
@@ -50,6 +52,12 @@ class RunConfig:
     connection_lifecycle: str = "none"
     discover_before_connect: bool = False
     disconnect_after_case: bool = True
+    tls_key_source: str = "none"
+    tls_key_env: str = ""
+    tls_key_file: str = ""
+    tls_key_identity: str = ""
+    tls_keyring: str = "@u"
+    import_tls_key: bool = False
     run_id: str | None = None
     artifact_policy: dict[str, Any] | None = None
     artifact_budget_gb: float | None = None
@@ -65,6 +73,8 @@ class RunConfig:
             raise ValueError("engine must be fio or vdbench")
         if self.connection_lifecycle not in {"none", "per-case"}:
             raise ValueError("connection_lifecycle must be none or per-case")
+        if self.tls_key_source not in {"none", "preloaded", "env", "file"}:
+            raise ValueError("tls_key_source must be none, preloaded, env, or file")
         if self.workers < 1:
             raise ValueError("workers must be >= 1")
         if self.shard_count < 1:
@@ -185,7 +195,7 @@ class RunOrchestrator:
                 "nvme": self.config.nvme_bin,
                 "fio": self.config.fio_bin,
                 "vdbench": self.config.vdbench_bin,
-                "keyctl": "keyctl",
+                "keyctl": self.config.keyctl_bin,
                 "tcpdump": "tcpdump",
             },
             command_line=sys.argv[:],
@@ -305,6 +315,7 @@ class _WorkerConfig:
     fio_bin: str
     vdbench_bin: str
     nvme_bin: str
+    keyctl_bin: str
     transport: str
     traddr: str
     trsvcid: str
@@ -315,6 +326,12 @@ class _WorkerConfig:
     connection_lifecycle: str
     discover_before_connect: bool
     disconnect_after_case: bool
+    tls_key_source: str
+    tls_key_env: str
+    tls_key_file: str
+    tls_key_identity: str
+    tls_keyring: str
+    import_tls_key: bool
 
     @classmethod
     def from_run_config(cls, config: RunConfig) -> "_WorkerConfig":
@@ -330,6 +347,7 @@ class _WorkerConfig:
             fio_bin=config.fio_bin,
             vdbench_bin=config.vdbench_bin,
             nvme_bin=config.nvme_bin,
+            keyctl_bin=config.keyctl_bin,
             transport=config.transport,
             traddr=config.traddr,
             trsvcid=config.trsvcid,
@@ -340,6 +358,12 @@ class _WorkerConfig:
             connection_lifecycle=config.connection_lifecycle,
             discover_before_connect=config.discover_before_connect,
             disconnect_after_case=config.disconnect_after_case,
+            tls_key_source=config.tls_key_source,
+            tls_key_env=config.tls_key_env,
+            tls_key_file=config.tls_key_file,
+            tls_key_identity=config.tls_key_identity,
+            tls_keyring=config.tls_keyring,
+            import_tls_key=config.import_tls_key,
         )
 
 
@@ -360,7 +384,8 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
     )
     command = builder.build(case)
     connection_plan = _build_connection_plan(config)
-    _write_json(run_dir / "command.json", {"argv": command, "workload": command, "connection": connection_plan})
+    tls_key_plan = _build_tls_key_plan(config)
+    _write_json(run_dir / "command.json", {"argv": command, "workload": command, "connection": connection_plan, "tls_key": tls_key_plan})
 
     if _is_write_case(case) and not config.allow_write:
         summary = {
@@ -386,6 +411,11 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
             "evidence": [
                 evidence_record("command_planned", config.engine, "command.json", "dry-run", "matched"),
                 *(
+                    [evidence_record("tls_key_import", "keyctl", "command.json", config.tls_key_identity, "planned")]
+                    if config.import_tls_key and config.tls_key_source in {"env", "file"}
+                    else []
+                ),
+                *(
                     [evidence_record("nvme_connect", "nvme-cli", "command.json", config.subsysnqn, "planned")]
                     if config.connection_lifecycle != "none"
                     else []
@@ -398,6 +428,22 @@ def _run_one_case(config: _WorkerConfig, case: dict[str, Any]) -> dict[str, Any]
 
     connection_started = False
     if config.connection_lifecycle == "per-case":
+        key_result = _import_tls_key(config, run_dir)
+        if not key_result["ok"]:
+            summary = {
+                "verdict": "FAIL_INFRA",
+                "reasons": [key_result["reason"]],
+                "returncode": key_result["returncode"],
+                "engine": config.engine,
+                "dry_run": False,
+                "connection_lifecycle": config.connection_lifecycle,
+                "evidence": [
+                    evidence_record("tls_key_import", "keyctl", "tls-key-stderr.log", str(key_result["returncode"]), "matched"),
+                ],
+            }
+            _finalize_summary(summary, case)
+            _write_json(run_dir / "summary.json", summary)
+            return summary
         connect_result = _run_connection_setup(config, run_dir)
         connection_started = connect_result["connected"]
         if not connect_result["connected"]:
@@ -524,6 +570,77 @@ def _build_connection_plan(config: _WorkerConfig) -> dict[str, Any]:
         "connect": connect,
         "disconnect": disconnect if config.disconnect_after_case else None,
     }
+
+
+def _build_tls_key_plan(config: _WorkerConfig) -> dict[str, Any]:
+    if config.tls_key_source in {"none", "preloaded"}:
+        return {
+            "enabled": config.tls_key_source == "preloaded",
+            "source": config.tls_key_source,
+            "identity": config.tls_key_identity or None,
+            "keyring": config.tls_keyring,
+            "import": None,
+        }
+    import_cmd = [config.keyctl_bin, "padd", "psk", config.tls_key_identity, config.tls_keyring]
+    return {
+        "enabled": True,
+        "source": config.tls_key_source,
+        "env": config.tls_key_env if config.tls_key_source == "env" else None,
+        "file": config.tls_key_file if config.tls_key_source == "file" else None,
+        "identity": config.tls_key_identity,
+        "keyring": config.tls_keyring,
+        "import": import_cmd if config.import_tls_key else None,
+        "secret_recorded": False,
+    }
+
+
+def _import_tls_key(config: _WorkerConfig, run_dir: Path) -> dict[str, Any]:
+    if not config.import_tls_key or config.tls_key_source in {"none", "preloaded"}:
+        return {"ok": True, "returncode": 0, "reason": "tls key import not requested"}
+    key_material = _read_tls_key_material(config)
+    if key_material is None:
+        return {"ok": False, "returncode": None, "reason": f"TLS key source {config.tls_key_source} is not available"}
+    argv = [config.keyctl_bin, "padd", "psk", config.tls_key_identity, config.tls_keyring]
+    try:
+        completed = subprocess.run(
+            argv,
+            cwd=run_dir,
+            input=key_material,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=config.timeout_s,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        _write_text(run_dir / "tls-key-stdout.log", "")
+        _write_text(run_dir / "tls-key-stderr.log", str(exc))
+        return {"ok": False, "returncode": 127, "reason": f"keyctl not found: {config.keyctl_bin}"}
+    except subprocess.TimeoutExpired as exc:
+        _write_text(run_dir / "tls-key-stdout.log", exc.stdout or "")
+        _write_text(run_dir / "tls-key-stderr.log", exc.stderr or "timeout")
+        return {"ok": False, "returncode": 124, "reason": "TLS key import timed out"}
+    _write_text(run_dir / "tls-key-stdout.log", completed.stdout)
+    _write_text(run_dir / "tls-key-stderr.log", completed.stderr)
+    return {
+        "ok": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "reason": "TLS key imported" if completed.returncode == 0 else f"TLS key import exited {completed.returncode}",
+    }
+
+
+def _read_tls_key_material(config: _WorkerConfig) -> str | None:
+    if config.tls_key_source == "env":
+        return os.environ.get(config.tls_key_env)
+    if config.tls_key_source == "file":
+        if not config.tls_key_file:
+            return None
+        try:
+            return Path(config.tls_key_file).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+    return None
 
 
 def _run_connection_setup(config: _WorkerConfig, run_dir: Path) -> dict[str, Any]:

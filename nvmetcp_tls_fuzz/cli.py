@@ -65,6 +65,7 @@ def main() -> None:
     run.add_argument("--fio-bin")
     run.add_argument("--vdbench-bin")
     run.add_argument("--nvme-bin")
+    run.add_argument("--keyctl-bin")
     run.add_argument("--transport")
     run.add_argument("--target-traddr")
     run.add_argument("--target-trsvcid")
@@ -75,6 +76,12 @@ def main() -> None:
     run.add_argument("--connection-lifecycle", choices=["none", "per-case"])
     run.add_argument("--discover-before-connect", action="store_true")
     run.add_argument("--no-disconnect-after-case", action="store_true")
+    run.add_argument("--tls-key-source", choices=["none", "preloaded", "env", "file"])
+    run.add_argument("--tls-key-env")
+    run.add_argument("--tls-key-file")
+    run.add_argument("--tls-key-identity")
+    run.add_argument("--tls-keyring")
+    run.add_argument("--import-tls-key", action="store_true")
     run.add_argument("--run-id")
     run.add_argument("--artifact-budget-gb", type=float)
     run.add_argument("--free-space-floor-gb", type=float)
@@ -131,6 +138,7 @@ def main() -> None:
         engine = args.engine or str(mode_config.get("engine", "fio"))
         connect_extra_args = tuple(args.connect_extra_arg or _list_config(mode_config.get("connect_extra_args")))
         disconnect_extra_args = tuple(args.disconnect_extra_arg or _list_config(mode_config.get("disconnect_extra_args")))
+        tls_key_config = mode_config.get("tls_key") if isinstance(mode_config.get("tls_key"), dict) else {}
         result = RunOrchestrator(
             RunConfig(
                 campaign_path=args.campaign,
@@ -149,6 +157,7 @@ def main() -> None:
                 fio_bin=args.fio_bin or str(mode_config.get("fio_bin") or mode_config.get("tool_paths", {}).get("fio") or "fio"),
                 vdbench_bin=args.vdbench_bin or str(mode_config.get("vdbench_bin") or mode_config.get("tool_paths", {}).get("vdbench") or "vdbench"),
                 nvme_bin=args.nvme_bin or str(mode_config.get("nvme_bin") or mode_config.get("tool_paths", {}).get("nvme") or "nvme"),
+                keyctl_bin=args.keyctl_bin or str(mode_config.get("keyctl_bin") or mode_config.get("tool_paths", {}).get("keyctl") or "keyctl"),
                 transport=args.transport or str(mode_config.get("transport", "tcp")),
                 traddr=args.target_traddr or str(mode_config.get("target_traddr") or mode_config.get("traddr") or ""),
                 trsvcid=args.target_trsvcid or str(mode_config.get("target_trsvcid") or mode_config.get("trsvcid") or ""),
@@ -159,6 +168,12 @@ def main() -> None:
                 connection_lifecycle=args.connection_lifecycle or str(mode_config.get("connection_lifecycle", "none")),
                 discover_before_connect=args.discover_before_connect or bool(mode_config.get("discover_before_connect", False)),
                 disconnect_after_case=not args.no_disconnect_after_case and bool(mode_config.get("disconnect_after_case", True)),
+                tls_key_source=args.tls_key_source or str(tls_key_config.get("source") or mode_config.get("tls_key_source") or "none"),
+                tls_key_env=args.tls_key_env or str(tls_key_config.get("env") or mode_config.get("tls_key_env") or ""),
+                tls_key_file=args.tls_key_file or str(tls_key_config.get("file") or mode_config.get("tls_key_file") or ""),
+                tls_key_identity=args.tls_key_identity or str(tls_key_config.get("identity") or mode_config.get("tls_key_identity") or ""),
+                tls_keyring=args.tls_keyring or str(tls_key_config.get("keyring") or mode_config.get("tls_keyring") or "@u"),
+                import_tls_key=args.import_tls_key or bool(tls_key_config.get("import", mode_config.get("import_tls_key", False))),
                 run_id=args.run_id,
                 artifact_policy=pangea_config.get("artifact_policy", {}),
                 artifact_budget_gb=args.artifact_budget_gb,

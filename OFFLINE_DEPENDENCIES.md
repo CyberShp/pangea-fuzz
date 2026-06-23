@@ -133,6 +133,27 @@ python -m pangea_fuzz.cli nvmetcp-tls run \
   --dry-run
 ```
 
+TLS configured key 推荐由用户或测试环境预先生成，然后 Pangea 从环境变量或文件读取并导入 keyring。示例：
+
+```bash
+export PANGEA_NVME_TLS_KEY="$(cat /secure/nvme-tls-configured-key.txt)"
+```
+
+```yaml
+modes:
+  nvmetcp_tls:
+    tool_paths:
+      keyctl: /opt/fuzz/bin/keyctl_aarch64
+    tls_key:
+      source: env
+      env: PANGEA_NVME_TLS_KEY
+      identity: NVMeTLSkey-1:your-identity
+      keyring: "@u"
+      import: true
+```
+
+Pangea 不会把 key 明文写入 artifact。`command.json` 只记录 key 来源、identity、keyring 和 `keyctl padd psk ...` 的导入计划。
+
 也可以写入 `pangea.config.yaml`：
 
 ```yaml

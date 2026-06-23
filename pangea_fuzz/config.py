@@ -57,6 +57,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
                 "nvme": "nvme",
                 "fio": "fio",
                 "vdbench": "vdbench",
+                "keyctl": "keyctl",
             },
             "transport": "tcp",
             "target_traddr": "",
@@ -68,6 +69,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "connection_lifecycle": "none",
             "discover_before_connect": False,
             "disconnect_after_case": True,
+            "tls_key": {
+                "source": "none",
+                "env": "",
+                "file": "",
+                "identity": "",
+                "keyring": "@u",
+                "import": False,
+            },
         },
         "nvme_kv": {
             "catalog": "kv_field_catalog.yaml",

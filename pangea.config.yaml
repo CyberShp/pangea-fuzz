@@ -45,6 +45,7 @@ modes:
       nvme: nvme
       fio: fio
       vdbench: vdbench
+      keyctl: keyctl
     # none: 只跑现有 device 上的 workload
     # per-case: 每个 case 执行 nvme connect -> fio/vdbench -> nvme disconnect
     connection_lifecycle: none
@@ -55,6 +56,15 @@ modes:
     disconnect_after_case: true
     tls_keyring: .nvme
     tls_key_identity: NVMeTLSkey-1:replace-me
+    # 推荐：用户先生成 configured key，再通过环境变量或文件提供给 Pangea 导入。
+    # Pangea 不会把 key 明文写入 artifact。
+    tls_key:
+      source: none        # none | preloaded | env | file
+      env: PANGEA_NVME_TLS_KEY
+      file: ""
+      identity: NVMeTLSkey-1:replace-me
+      keyring: "@u"
+      import: false
   nvme_kv:
     catalog: kv_field_catalog.yaml
     device_path: /dev/nvme1n1
