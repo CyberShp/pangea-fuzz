@@ -351,7 +351,7 @@ def _read_campaign(path: Path) -> Iterator[dict[str, Any]]:
         for line in handle:
             stripped = line.strip()
             if stripped:
-                yield json.loads(stripped)
+                yield json.loads(stripped.lstrip("\ufeff"))
 
 
 def _mutation(case: dict[str, Any]) -> dict[str, Any]:

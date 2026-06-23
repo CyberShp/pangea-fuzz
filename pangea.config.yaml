@@ -38,7 +38,21 @@ modes:
     subsysnqn: nqn.2026-06.example:nvmetcp-tls-fuzz
     device: /dev/nvme1n1
     engine: fio
+    runtime_s: 5
+    timeout_s: 120
     allow_write: false
+    tool_paths:
+      nvme: nvme
+      fio: fio
+      vdbench: vdbench
+    # none: 只跑现有 device 上的 workload
+    # per-case: 每个 case 执行 nvme connect -> fio/vdbench -> nvme disconnect
+    connection_lifecycle: none
+    transport: tcp
+    connect_extra_args: []
+    disconnect_extra_args: []
+    discover_before_connect: false
+    disconnect_after_case: true
     tls_keyring: .nvme
     tls_key_identity: NVMeTLSkey-1:replace-me
   nvme_kv:

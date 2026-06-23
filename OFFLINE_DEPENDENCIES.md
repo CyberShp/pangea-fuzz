@@ -115,6 +115,35 @@ python -m pangea_fuzz.cli net-protocol replay \
   --tcpreplay-bin /opt/fuzz/bin/tcpreplay_aarch64
 ```
 
+NVMe/TCP TLS mode 也支持显式传 `nvme`、`fio`、`vdbench` 路径：
+
+```bash
+python -m pangea_fuzz.cli nvmetcp-tls run \
+  --campaign artifacts/tls-campaign.jsonl \
+  --artifacts-dir artifacts/tls-run \
+  --device /dev/nvme1n1 \
+  --fio-bin /opt/fuzz/bin/fio_aarch64 \
+  --vdbench-bin /opt/fuzz/bin/vdbench \
+  --nvme-bin /opt/fuzz/bin/nvme_aarch64 \
+  --connection-lifecycle per-case \
+  --target-traddr 192.0.2.10 \
+  --target-trsvcid 4420 \
+  --subsysnqn nqn.2026-06.example:nvmetcp-tls-fuzz \
+  --connect-extra-arg=--tls \
+  --dry-run
+```
+
+也可以写入 `pangea.config.yaml`：
+
+```yaml
+modes:
+  nvmetcp_tls:
+    tool_paths:
+      nvme: /opt/fuzz/bin/nvme_aarch64
+      fio: /opt/fuzz/bin/fio_aarch64
+      vdbench: /opt/fuzz/bin/vdbench
+```
+
 `tcpdump` 路径可在环境采集时记录：
 
 ```bash
@@ -153,4 +182,3 @@ tcpreplay --version || true
 ```json
 {"tool": "tcpdump", "available": false, "error": "..."}
 ```
-

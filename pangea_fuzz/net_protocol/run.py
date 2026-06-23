@@ -244,7 +244,7 @@ def _read_campaign(path: Path) -> Iterator[dict[str, Any]]:
         for line in handle:
             stripped = line.strip()
             if stripped:
-                yield json.loads(stripped)
+                yield json.loads(stripped.lstrip("\ufeff"))
 
 
 def _write_case_artifact(root: Path, case: dict[str, Any], packet: bytes, verdict: str, reason: str) -> dict[str, Any]:

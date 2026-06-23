@@ -55,6 +55,8 @@ vdbench -h
 ```bash
 /opt/fuzz/bin/tcpdump_aarch64 --version
 /opt/fuzz/bin/tcpreplay_aarch64 --version
+/opt/fuzz/bin/nvme_aarch64 --version
+/opt/fuzz/bin/fio_aarch64 --version
 ```
 
 回放时显式传路径：
@@ -66,6 +68,23 @@ python -m pangea_fuzz.cli net-protocol replay \
   --iface eth-test \
   --dry-run \
   --tcpreplay-bin /opt/fuzz/bin/tcpreplay_aarch64
+```
+
+NVMe/TCP TLS 建链和 workload 工具路径可以放在 `pangea.config.yaml`：
+
+```yaml
+modes:
+  nvmetcp_tls:
+    device: /dev/nvme1n1
+    tool_paths:
+      nvme: /opt/fuzz/bin/nvme_aarch64
+      fio: /opt/fuzz/bin/fio_aarch64
+      vdbench: /opt/fuzz/bin/vdbench
+    target_traddr: 192.0.2.10
+    target_trsvcid: 4420
+    subsysnqn: nqn.2026-06.example:nvmetcp-tls-fuzz
+    connection_lifecycle: per-case
+    connect_extra_args: [--tls]
 ```
 
 ## 离线打包
@@ -134,4 +153,3 @@ python -m pangea_fuzz.cli pack-repro \
   --case-dir artifacts/tls-run/case-123 \
   --output artifacts/repro-case-123.zip
 ```
-

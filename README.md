@@ -127,11 +127,45 @@ artifact_policy:
 --keep-pcap always|never|on-fail|on-new-bucket
 ```
 
+`nvmetcp-tls run` 会自动读取当前目录的 `pangea.config.yaml`。如果配置文件不在当前目录，可以显式指定：
+
+```bash
+python -m pangea_fuzz.cli nvmetcp-tls run \
+  --config /opt/fuzz/pangea.config.yaml \
+  --campaign artifacts/tls-campaign.jsonl \
+  --dry-run
+```
+
+命令行参数优先级高于配置文件。也就是说，配置文件里可以放稳定环境参数，现场只覆盖本轮需要变化的 `--campaign`、`--run-id`、`--workers` 等。
+
 经验值：过去 5 万次迭代打满 300GB，约等于每 case 6MB。150 万次如果不裁剪会接近 9TB。因此正式长跑必须保留 PASS tail、只对失败桶保留完整样本。
 
 ## 3. NVMe/TCP TLS
 
 先确认主机能正常 discover、connect、list、disconnect。TLS PSK configured key 由 hostnqn、subsysnqn 和阵列侧配置生成；当前假设主机只支持 SHA256 configured key。
+
+如果要让每个 case 覆盖“建链 -> 下发 IO -> 断链”的完整流程，在 `pangea.config.yaml` 中打开：
+
+```yaml
+modes:
+  nvmetcp_tls:
+    device: /dev/nvme1n1
+    engine: fio
+    tool_paths:
+      nvme: /opt/fuzz/bin/nvme_aarch64
+      fio: /opt/fuzz/bin/fio_aarch64
+      vdbench: /opt/fuzz/bin/vdbench
+    target_traddr: 192.0.2.10
+    target_trsvcid: 4420
+    subsysnqn: nqn.2026-06.example:nvmetcp-tls-fuzz
+    transport: tcp
+    connection_lifecycle: per-case
+    discover_before_connect: false
+    disconnect_after_case: true
+    connect_extra_args: [--tls]
+```
+
+`connect_extra_args` 用来适配不同 nvme-cli 版本的 TLS 参数；如果你们内网 nvme-cli 使用的是 `--tls_key`、`--keyring` 或其他参数，不需要改代码，直接写到这个列表里。
 
 生成小 campaign：
 
@@ -148,13 +182,27 @@ python -m pangea_fuzz.cli nvmetcp-tls generate-campaign \
 ```bash
 python -m pangea_fuzz.cli nvmetcp-tls run \
   --campaign artifacts/tls-campaign.jsonl \
-  --artifacts-dir artifacts/tls-run-001 \
-  --device /dev/nvme1n1 \
-  --engine fio \
-  --workers 8 \
   --dry-run \
   --run-id tls-run-001 \
   --progress-interval 5
+```
+
+如果不使用配置文件，也可以全用命令行：
+
+```bash
+python -m pangea_fuzz.cli nvmetcp-tls run \
+  --campaign artifacts/tls-campaign.jsonl \
+  --artifacts-dir artifacts/tls-run-001 \
+  --device /dev/nvme1n1 \
+  --engine fio \
+  --fio-bin /opt/fuzz/bin/fio_aarch64 \
+  --nvme-bin /opt/fuzz/bin/nvme_aarch64 \
+  --connection-lifecycle per-case \
+  --target-traddr 192.0.2.10 \
+  --target-trsvcid 4420 \
+  --subsysnqn nqn.2026-06.example:nvmetcp-tls-fuzz \
+  --connect-extra-arg=--tls \
+  --dry-run
 ```
 
 真实读 workload：
@@ -452,7 +500,8 @@ sudo ethtool -K $IFACE tso off gso off
 
 ## 11. 当前边界
 
-`fake_target.py` 和 `split_proxy.py` 目前是可复用模块，不是一键启动的完整协议注入 CLI。当前 `nvmetcp-tls run` 负责消费 campaign、调度 fio/vdbench、归档执行证据、生成报告；TLS PDU proxy/fake target 的 per-case 自动注入仍是后续工作。
+`nvmetcp-tls run` 现在支持两种执行方式：默认 `connection_lifecycle: none` 时只在已有 device 上调度 fio/vdbench；设置 `connection_lifecycle: per-case` 后，每个 case 会执行 `nvme connect -> fio/vdbench -> nvme disconnect`，并把建链命令、workload 命令和证据写入 case 目录。
+
+`fake_target.py` 和 `split_proxy.py` 目前仍是可复用模块，不是一键启动的完整协议注入 CLI。TLS PDU proxy/fake target 的 per-case 自动字段注入仍是后续工作。
 
 目标侧日志和交换机计数器当前只定义外部导入目录和报告字段，第一阶段不实现厂商 API 对接。
-
